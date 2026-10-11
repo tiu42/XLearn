@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-xlearn}
+      POSTGRES_USER: ${POSTGRES_USER:-xlearn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xlearn}
+      TZ: UTC
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Chỉ chạy khi volume còn TRỐNG (lần khởi động đầu). Muốn chạy lại: docker compose down -v
+      # Mount từng file, KHÔNG mount cả thư mục db/ để tránh chạy 00_drop.sql
+      - ./db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env              # secret đọc từ .env, KHÔNG viết thẳng vào file này
+    environment:
+      PORT: "8000"
+      REDIS_URL: redis://redis:6379/0   # hostname = tên service, KHÔNG phải localhost
+      DATABASE_URL: postgresql://${POSTGRES_USER:-xlearn}:${POSTGRES_PASSWORD:-xlearn}@postgres:5432/${POSTGRES_DB:-xlearn}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:
