@@ -1,9 +1,11 @@
+import { QueryClientProvider } from '@tanstack/react-query'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
 import { LearnerHeader, TeacherHeader } from './components/AppHeader'
 import Login from './pages/Login'
+import { queryClient } from './queryClient'
 
 // Tách code theo trang: màn đăng nhập không phải tải trình hiển thị Markdown, trang giảng viên…
 const CourseHome = lazy(() => import('./pages/learner/CourseHome'))
@@ -29,36 +31,38 @@ const TeacherLayout = () => (
 
 export default function App() {
     return (
-        <BrowserRouter>
-            <AuthProvider>
-                <Routes>
-                    <Route path="/login" element={<Login />} />
+        <QueryClientProvider client={queryClient}>
+            <BrowserRouter>
+                <AuthProvider>
+                    <Routes>
+                        <Route path="/login" element={<Login />} />
 
-                    <Route element={<RequireAuth />}>
-                        <Route element={<LearnerLayout />}>
-                            <Route index element={<Dashboard />} />
-                            <Route path="courses" element={<MyCourses />} />
-                            <Route path="courses/:courseId" element={<CourseHome />} />
+                        <Route element={<RequireAuth />}>
+                            <Route element={<LearnerLayout />}>
+                                <Route index element={<Dashboard />} />
+                                <Route path="courses" element={<MyCourses />} />
+                                <Route path="courses/:courseId" element={<CourseHome />} />
+                            </Route>
+                            {/* Giao diện học tự quản header vì chế độ làm bài toàn màn hình */}
+                            <Route path="courses/:courseId/learn" element={<Suspense fallback={<Loading />}><Learn /></Suspense>} />
                         </Route>
-                        {/* Giao diện học tự quản header vì chế độ làm bài toàn màn hình */}
-                        <Route path="courses/:courseId/learn" element={<Suspense fallback={<Loading />}><Learn /></Suspense>} />
-                    </Route>
 
-                    <Route path="teach" element={<RequireAuth teacher />}>
-                        <Route element={<TeacherLayout />}>
-                            <Route index element={<TeachCourses />} />
-                            <Route path="courses/:courseId" element={<Navigate to="stats" replace />} />
-                            <Route path="courses/:courseId/stats" element={<CourseStats />} />
-                            <Route path="courses/:courseId/content" element={<CourseContent />} />
-                            <Route path="courses/:courseId/quizzes/:quizId" element={<QuizEditor />} />
-                            <Route path="students" element={<Students />} />
-                            <Route path="students/:studentId" element={<StudentDetail />} />
+                        <Route path="teach" element={<RequireAuth teacher />}>
+                            <Route element={<TeacherLayout />}>
+                                <Route index element={<TeachCourses />} />
+                                <Route path="courses/:courseId" element={<Navigate to="stats" replace />} />
+                                <Route path="courses/:courseId/stats" element={<CourseStats />} />
+                                <Route path="courses/:courseId/content" element={<CourseContent />} />
+                                <Route path="courses/:courseId/quizzes/:quizId" element={<QuizEditor />} />
+                                <Route path="students" element={<Students />} />
+                                <Route path="students/:studentId" element={<StudentDetail />} />
+                            </Route>
                         </Route>
-                    </Route>
 
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-            </AuthProvider>
-        </BrowserRouter>
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                </AuthProvider>
+            </BrowserRouter>
+        </QueryClientProvider>
     )
 }

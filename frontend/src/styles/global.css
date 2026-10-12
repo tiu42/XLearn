@@ -277,6 +277,10 @@ button:disabled { cursor: not-allowed; }
 .toggle-group button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
 .toggle-group button[aria-pressed="true"] { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.pager .btn--square[aria-current="page"] { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.pager__gap { min-width: 20px; text-align: center; color: var(--muted); }
+
 .status-msg { padding: 10px 12px; border-radius: 6px; font-size: 14px; }
 .status-msg--error { border: 1px solid #F1B5AE; background: #FDF0EE; color: var(--danger); }
 .status-msg--ok { border: 1px solid #B7DDB4; background: #EDF7EC; color: #1C3F1A; }
