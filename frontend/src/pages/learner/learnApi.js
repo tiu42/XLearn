@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import api from '../../api'
 import { MY_COURSES_KEY } from './myCoursesApi'
+import { TIMELINE_KEY } from './quizApi'
 
 /**
  * Giao diện học:
@@ -29,8 +30,12 @@ export function useReportProgress(courseId) {
             const key = lessonKey(courseId, lessonId)
             const before = qc.getQueryData(key)?.progress.status
             qc.setQueryData(key, (old) => old && { ...old, progress: data.progress })
-            // Trạng thái bài đổi (bắt đầu / hoàn thành) → trạng thái chủ đề, khóa tuần tự, % khóa học đổi theo
-            if (before !== data.progress.status) qc.invalidateQueries({ queryKey: MY_COURSES_KEY })
+            // Trạng thái bài đổi (bắt đầu / hoàn thành) → trạng thái chủ đề, khóa tuần tự, % khóa học đổi theo;
+            // mở khóa chủ đề tiếp theo thì bài kiểm tra trên dòng thời gian cũng hết "Chưa mở khóa"
+            if (before !== data.progress.status) {
+                qc.invalidateQueries({ queryKey: MY_COURSES_KEY })
+                qc.invalidateQueries({ queryKey: TIMELINE_KEY })
+            }
         },
     })
     return useCallback((lessonId, body) => mutate({ lessonId, body }), [mutate])

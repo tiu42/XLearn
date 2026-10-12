@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { errorMessage } from '../../api'
-import { CalendarIcon, QuizIcon } from '../../components/Icons'
+import { CalendarIcon, LockIcon, QuizIcon } from '../../components/Icons'
 import { CoursePattern, SearchInput, SelectFilter } from '../../components/ui'
 import { courseCategory, courseColors, useMyCourses } from './myCoursesApi'
 import { useTimeline } from './quizApi'
@@ -20,15 +20,21 @@ function dayLabel(date) {
     return `${wd.charAt(0).toUpperCase()}${wd.slice(1).toLowerCase()}, ${d} tháng ${m} năm ${y}`
 }
 
-/** Mốc từ API → dòng hiển thị. Bài kiểm tra mở thẳng bài đó trong giao diện học. */
+/** Mốc từ API → dòng hiển thị. Bài kiểm tra mở thẳng bài đó trong giao diện học;
+ *  bài còn bị khóa (khóa tuần tự) dẫn về trang khóa học, bài đã hết lượt chỉ còn xem kết quả. */
 function toRow(x, overdue) {
     const at = new Date(x.at)
     const base = { key: `${x.kind}-${x.course_id}-${x.lesson_id ?? ''}`, date: dayLabel(at), time: TIME.format(at), kind: x.kind }
     if (x.kind === 'quiz') {
+        const lessonUrl = `/courses/${x.course_id}/learn?lesson=${x.lesson_id}`
+        const state = x.locked
+            ? { badge: 'Chưa mở khóa', lock: true, url: `/courses/${x.course_id}`, cta: 'Vào khóa học' }
+            : x.out_of_attempts
+                ? { badge: 'Hết lượt làm bài', url: lessonUrl, cta: 'Xem kết quả' }
+                : { url: lessonUrl, cta: overdue ? 'Xem bài kiểm tra' : 'Làm bài kiểm tra' }
         return {
-            ...base, title: `${x.title} ${overdue ? 'đã đóng' : 'đóng'}`,
+            ...base, ...state, title: `${x.title} ${overdue ? 'đã đóng' : 'đóng'}`,
             meta: `${x.is_graded ? 'Bài kiểm tra tính điểm' : 'Quiz luyện tập'} · ${x.course_title}`,
-            url: `/courses/${x.course_id}/learn?lesson=${x.lesson_id}`, cta: overdue ? 'Xem bài kiểm tra' : 'Làm bài kiểm tra',
         }
     }
     return {
@@ -48,7 +54,7 @@ export default function Dashboard() {
     const tl = useTimeline(range)
     const timeline = (tl.data?.items ?? []).map((x) => toRow(x, range === 'overdue'))
 
-    const shown = timeline.filter((t) => !q || `${t.title} ${t.meta}`.toLowerCase().includes(q.toLowerCase()))
+    const shown = timeline.filter((t) => !q || `${t.title} ${t.meta} ${t.badge ?? ''}`.toLowerCase().includes(q.toLowerCase()))
     const sorted = sort === 'course' ? [...shown].sort((a, b) => a.meta.localeCompare(b.meta, 'vi')) : shown
     // Gom theo ngày, giữ thứ tự xuất hiện
     const days = sorted.reduce((acc, t) => {
@@ -104,7 +110,14 @@ export default function Dashboard() {
                                     <span className="tl-time">{t.time}</span>
                                     <span className={`tl-icon${t.kind === 'due' ? ' tl-icon--due' : ''}`}>{t.kind === 'quiz' ? <QuizIcon /> : <CalendarIcon />}</span>
                                     <div className="tl-body">
-                                        <Link to={t.url}>{t.title}</Link>
+                                        <span>
+                                            <Link to={t.url}>{t.title}</Link>
+                                            {t.badge && (
+                                                <span className="pill pill--gray pill--tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                                                    {t.lock && <LockIcon />}{t.badge}
+                                                </span>
+                                            )}
+                                        </span>
                                         <span className="small muted">{t.meta}</span>
                                     </div>
                                     <Link to={t.url} className="btn btn--outline" style={{ fontWeight: 400, minHeight: 40 }}>{t.cta}</Link>

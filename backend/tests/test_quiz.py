@@ -349,3 +349,42 @@ def test_dong_thoi_gian_qua_han(client, hv, quiz, sqlite_engine):
     _quiz_settings(sqlite_engine, quiz, closes_at=datetime.now(timezone.utc) - timedelta(days=1))
     items = client.get("/me/timeline?overdue=true", headers=hv).json()["items"]
     assert [(x["kind"], x["title"]) for x in items] == [("quiz", "Kiểm tra")]
+
+
+def test_dong_thoi_gian_bai_bi_khoa(client, hv, quiz, seeded_db, sqlite_engine):
+    from sqlalchemy import update
+    from sqlalchemy.orm import Session
+
+    from app.models import Course, CourseSection, Lesson, LessonProgress
+
+    _quiz_settings(sqlite_engine, quiz, closes_at=datetime.now(timezone.utc) + timedelta(days=3))
+    with Session(sqlite_engine) as s:
+        s.execute(update(Course).where(Course.id == quiz["course"]).values(is_sequential=True))
+        sec2 = CourseSection(course_id=quiz["course"], title="Chủ đề 2", sort_order=1)
+        s.add(sec2)
+        s.flush()
+        s.execute(update(Lesson).where(Lesson.id == quiz["quiz"]).values(section_id=sec2.id))
+        s.commit()
+
+    [x] = client.get("/me/timeline", headers=hv).json()["items"]
+    assert x["locked"] is True and x["out_of_attempts"] is False
+
+    # Học xong chủ đề trước thì bài kiểm tra mở khóa
+    with Session(sqlite_engine) as s:
+        s.add(LessonProgress(user_id=seeded_db["hv@x.dev"], lesson_id=quiz["page"], status="completed"))
+        s.commit()
+    [x] = client.get("/me/timeline", headers=hv).json()["items"]
+    assert x["locked"] is False
+
+
+def test_dong_thoi_gian_het_luot(client, hv, quiz, sqlite_engine):
+    _quiz_settings(sqlite_engine, quiz, closes_at=datetime.now(timezone.utc) + timedelta(days=3))
+    a = _start(client, hv, quiz)
+    client.post(_url(quiz, f"/attempts/{a['id']}/submit"), headers=hv)
+    b = _start(client, hv, quiz)  # lượt cuối đang làm dở: chưa tính là hết lượt
+    [x] = client.get("/me/timeline", headers=hv).json()["items"]
+    assert x["out_of_attempts"] is False and x["locked"] is False
+
+    client.post(_url(quiz, f"/attempts/{b['id']}/submit"), headers=hv)
+    [x] = client.get("/me/timeline", headers=hv).json()["items"]
+    assert x["out_of_attempts"] is True
