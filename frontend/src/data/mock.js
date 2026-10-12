@@ -1,7 +1,8 @@
 // Dữ liệu mẫu, khớp cấu trúc và nội dung với backend/db/02_seed.sql.
 // Backend hiện có /auth, /admin/users, /me/courses (Khóa học của tôi, khối "gần đây" ở Dashboard),
-// /me/courses/:id (Trang khóa học) và /me/courses/:id/lessons/:lessonId (Giao diện học);
-// các màn còn lại (giảng viên, làm bài kiểm tra…) tạm dùng dữ liệu này.
+// /me/courses/:id (Trang khóa học), /me/courses/:id/lessons/:lessonId (Giao diện học),
+// …/lessons/:lessonId/quiz (Làm bài kiểm tra) và /me/timeline (Dòng thời gian ở Dashboard);
+// các màn còn lại (giảng viên…) tạm dùng dữ liệu này.
 // Khi có API, thay từng hàm get* bằng lời gọi api.get(...) tương ứng.
 //
 // Quy ước để lớp API chuyển đổi giữa DB và giao diện:
@@ -87,14 +88,6 @@ const COURSES = [
 
 export const getTeacherCourses = () => clone(COURSES)
 export const getCourse = (id) => clone(COURSES.find((c) => c.id === Number(id)) ?? COURSES[0])
-
-// Dòng thời gian: chỉ lấy từ DB có sẵn — giờ đóng quiz (quizzes.closes_at) và hạn khóa (enrollments.due_at)
-export const getTimeline = () => [
-    { date: 'Chủ nhật, 18 tháng 10 năm 2026', time: '23:59', kind: 'quiz', title: 'Bài kiểm tra cuối: Bảo mật thông tin đóng', meta: 'Bài kiểm tra tính điểm · Bảo mật thông tin 2026', cta: 'Làm bài kiểm tra', courseId: 2 },
-    { date: 'Chủ nhật, 18 tháng 10 năm 2026', time: '23:59', kind: 'due', title: 'Hạn hoàn thành khóa học', meta: 'Bắt buộc · Bảo mật thông tin 2026', cta: 'Vào khóa học', courseId: 2 },
-    { date: 'Thứ ba, 20 tháng 10 năm 2026', time: '17:00', kind: 'quiz', title: 'Kiểm tra nhanh: Thiết bị bảo hộ đóng', meta: 'Quiz luyện tập · An toàn lao động tại khu vực sản xuất', cta: 'Làm bài kiểm tra', courseId: 1 },
-    { date: 'Thứ bảy, 31 tháng 10 năm 2026', time: '23:59', kind: 'quiz', title: 'Bài kiểm tra cuối khóa đóng', meta: 'Bài kiểm tra tính điểm · An toàn lao động tại khu vực sản xuất', cta: 'Làm bài kiểm tra', courseId: 1 },
-]
 
 /* --------------------------------------------------------------------------
  * Nội dung mẫu khóa ATLD-01 (bài đọc, câu hỏi quiz) cho các màn giảng viên

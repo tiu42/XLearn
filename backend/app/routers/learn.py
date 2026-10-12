@@ -37,7 +37,7 @@ _NOT_FOUND = {404: {"description": "Không có bài học, bài chưa publish ho
 _LOCKED = {403: {"description": "Khóa học tuần tự, bài thuộc chủ đề chưa được mở"}}
 
 
-def _load_lesson(db: Session, user: User, course_id: int, lesson_id: int,
+def load_lesson(db: Session, user: User, course_id: int, lesson_id: int,
                  ) -> tuple[Enrollment, Course, Lesson, Outline]:
     enrollment, course = get_enrollment_or_404(db, user.id, course_id)
     outline = build_outline(db, course, user.id)
@@ -53,7 +53,7 @@ def _load_lesson(db: Session, user: User, course_id: int, lesson_id: int,
     return enrollment, course, lesson, outline
 
 
-def _progress_out(progress: LessonProgress | None) -> LessonProgressOut:
+def progress_out(progress: LessonProgress | None) -> LessonProgressOut:
     if progress is None:
         return LessonProgressOut(status="not_started", progress_percent=0, last_position_seconds=None,
                                  last_page=None, time_spent_seconds=0, started_at=None, completed_at=None)
@@ -74,7 +74,7 @@ def get_lesson(
 ):
     """Nội dung một bài: video/PDF (URL file), Markdown của bài đọc, tệp đính kèm, thông tin bài kiểm tra
     (không gồm câu hỏi) và tiến độ hiện tại. Chỉ đọc — mở bài được ghi nhận qua POST …/progress."""
-    _, _, lesson, _ = _load_lesson(db, user, course_id, lesson_id)
+    _, _, lesson, _ = load_lesson(db, user, course_id, lesson_id)
 
     media = lesson.media
     quiz = None
@@ -103,7 +103,7 @@ def get_lesson(
         ) for f in lesson.files if f.storage_object.upload_status == "ready"],
         quiz=quiz,
         completion=_completion_out(lesson),
-        progress=_progress_out(progress),
+        progress=progress_out(progress),
     )
 
 
@@ -121,22 +121,23 @@ def report_progress(
     Bài đã hoàn thành thì giữ nguyên trạng thái. Hoàn thành mọi bài → ghi danh chuyển sang 'completed'.
     Trả kèm tiến độ khóa để giao diện cập nhật ngay.
     """
-    enrollment, course, lesson, _ = _load_lesson(db, user, course_id, lesson_id)
+    enrollment, course, lesson, _ = load_lesson(db, user, course_id, lesson_id)
     progress = record_progress(db, user.id, lesson, ProgressUpdate(**(body or LessonProgressIn()).model_dump()))
     db.flush()
+    course_progress = sync_course_progress(db, enrollment, course, user.id)
+    db.commit()
+    return LessonProgressResultOut(lesson_id=lesson.id, progress=progress_out(progress), course=course_progress)
 
-    outline = build_outline(db, course, user.id)
+
+def sync_course_progress(db: Session, enrollment: Enrollment, course: Course, user_id: int) -> CourseProgressOut:
+    """Tiến độ khóa sau khi tiến độ bài thay đổi; hoàn thành mọi bài → ghi danh chuyển 'completed'.
+    Chưa commit."""
+    outline = build_outline(db, course, user_id)
     total, done = outline.total_lessons, outline.completed_lessons
     if enrollment.status == "active" and total and done == total:
         enrollment.status = "completed"
         enrollment.completed_at = datetime.now(timezone.utc)
-    db.commit()
-
-    return LessonProgressResultOut(
-        lesson_id=lesson.id,
-        progress=_progress_out(progress),
-        course=CourseProgressOut(
-            total_lessons=total, completed_lessons=done,
-            progress_percent=round(100 * done / total, 2) if total else 0,
-            enrollment_status=enrollment.status, completed_at=enrollment.completed_at),
-    )
+    return CourseProgressOut(
+        total_lessons=total, completed_lessons=done,
+        progress_percent=round(100 * done / total, 2) if total else 0,
+        enrollment_status=enrollment.status, completed_at=enrollment.completed_at)
