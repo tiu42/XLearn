@@ -6,6 +6,7 @@ os.environ["DATABASE_URL"] = "sqlite://"  # SQLite in-memory, không cần Postg
 os.environ["AGENT_API_KEY"] = "test-key"
 os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key-at-least-32-characters"
 os.environ["BCRYPT_ROUNDS"] = "4"  # cost thấp nhất để test chạy nhanh
+os.environ["S3_BUCKET"] = ""  # tắt object storage dù .env có cấu hình; test bật bằng fixture s3
 
 import fakeredis
 import pytest

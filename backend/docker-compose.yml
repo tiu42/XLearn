@@ -34,6 +34,41 @@ services:
       timeout: 3s
       retries: 5
 
+  # Object storage chuẩn S3 cho video/PDF/ảnh (SeaweedFS; MinIO đã ngừng phát hành image Docker).
+  # Cổng S3: http://localhost:8333. Khóa truy cập lấy từ S3_ACCESS_KEY / S3_SECRET_KEY.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.47
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-xlearn}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-xlearn-storage}
+    # Sinh file cấu hình khóa S3 từ biến môi trường rồi chạy master + volume + filer + S3 trong một container.
+    # s3.allowedOrigins mặc định "*" → trình duyệt PUT thẳng bằng presigned URL được (CORS).
+    entrypoint: >
+      sh -c 'printf "{\"identities\":[{\"name\":\"xlearn\",\"credentials\":[{\"accessKey\":\"%s\",\"secretKey\":\"%s\"}],\"actions\":[\"Admin\",\"Read\",\"Write\",\"List\",\"Tagging\"]}]}" "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /etc/s3.json
+      && exec weed server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/s3.json -volume.max=0'
+    ports:
+      - "8333:8333"
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8888/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # Chạy một lần: tạo bucket (private) nếu chưa có rồi thoát
+  storage-init:
+    image: chrislusf/seaweedfs:4.47
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-xlearn-media}
+    entrypoint: >
+      sh -c 'echo "s3.bucket.create -name $$S3_BUCKET" | weed shell -master=seaweedfs:9333 2>&1 | tee /tmp/out
+      && ! grep -qi "error" /tmp/out || grep -qi "already exist" /tmp/out'
+    restart: "no"
+
   api:
     build: .
     ports:
@@ -43,11 +78,14 @@ services:
       PORT: "8000"
       REDIS_URL: redis://redis:6379/0   # hostname = tên service, KHÔNG phải localhost
       DATABASE_URL: postgresql://${POSTGRES_USER:-xlearn}:${POSTGRES_PASSWORD:-xlearn}@postgres:5432/${POSTGRES_DB:-xlearn}
+      S3_ENDPOINT_URL: http://seaweedfs:8333   # trong mạng docker; trình duyệt vẫn dùng S3_PUBLIC_URL
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
     stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -58,3 +96,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  seaweedfs-data:

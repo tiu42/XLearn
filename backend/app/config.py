@@ -33,6 +33,20 @@ class Settings(BaseSettings):
     # Gốc URL công khai của object storage (vd MinIO bucket public / CDN): <gốc>/<bucket>/<object_key>.
     # Bỏ trống → API trả url = null (giao diện báo "chưa tải lên"). Sau thay bằng presigned URL.
     media_base_url: str | None = None
+    # Object storage chuẩn S3 (SeaweedFS khi dev, Supabase Storage / AWS S3… khi triển khai).
+    # Có S3_BUCKET → upload bằng presigned PUT và trả file bằng presigned GET (bucket để private).
+    s3_bucket: str | None = None
+    s3_provider: str = "s3"  # ghi vào storage_objects.provider: s3 | minio | gcs | azure
+    s3_endpoint_url: str | None = None  # backend gọi tới (trong docker: http://seaweedfs:8333); None = AWS
+    s3_public_url: str | None = None  # trình duyệt gọi tới (http://localhost:8333); None = như endpoint
+    s3_region: str = "us-east-1"
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    s3_presign_seconds: int = 3600  # thời hạn URL tạm thời (upload từng phần và xem file)
+    # Giới hạn mỗi file. Mặc định 500 GB = mức tối đa của Supabase gói Pro; gói Free chỉ cho 50 MB.
+    max_upload_mb: int = 500 * 1024
+    # Kích thước mỗi phần khi multipart upload (tự tăng với file rất lớn vì S3 giới hạn 10.000 phần)
+    s3_part_size_mb: int = 16
     # rate_limit_per_minute: int = 10
     # monthly_budget_usd: float = 10.0
 

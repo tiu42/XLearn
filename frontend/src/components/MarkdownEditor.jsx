@@ -1,12 +1,18 @@
 import { useRef, useState } from 'react'
-import { registerLocalFile } from '../data/mock'
+import { errorMessage } from '../api'
 import Markdown from './Markdown'
 
 const TABLE = '\n| Cột 1 | Cột 2 |\n|---|---|\n| | |\n'
 
-/** Ô soạn Markdown cho bài đọc: thanh công cụ, chèn ảnh, xem trước. */
-export default function MarkdownEditor({ id, value, onChange, rows = 12 }) {
+/**
+ * Ô soạn Markdown cho bài đọc: thanh công cụ, chèn ảnh, xem trước.
+ * onUploadImage(file) → Promise<{ id }>: tải ảnh lên rồi chèn ![…](file:<id>).
+ * resolveFile(src): đổi file:<id> thành URL khi xem trước.
+ */
+export default function MarkdownEditor({ id, value, onChange, rows = 12, onUploadImage, resolveFile }) {
     const [tab, setTab] = useState('write')
+    const [uploading, setUploading] = useState(false)
+    const [uploadError, setUploadError] = useState('')
     const ta = useRef(null)
     const fileInput = useRef(null)
 
@@ -35,13 +41,22 @@ export default function MarkdownEditor({ id, value, onChange, rows = 12 }) {
         requestAnimationFrame(() => el?.focus())
     }
 
-    function pickImage(e) {
+    async function pickImage(e) {
         const file = e.target.files?.[0]
         e.target.value = ''
         if (!file) return
-        // Bản mock: ảnh giữ trong trình duyệt. Khi có API: upload → storage_objects + lesson_files (purpose = 'inline')
-        const fileId = registerLocalFile(file)
-        insert(`\n![${file.name.replace(/\.[^.]+$/, '')}](file:${fileId})\n`)
+        const alt = file.name.replace(/\.[^.]+$/, '').replace(/[[\]]/g, '')
+        // Ảnh lên object storage; backend gắn vào bài (lesson_files 'inline') khi lưu bài
+        setUploading(true)
+        setUploadError('')
+        try {
+            const { id: fileId } = await onUploadImage(file)
+            insert(`\n![${alt}](file:${fileId})\n`)
+        } catch (err) {
+            setUploadError(err?.response ? errorMessage(err, 'Không tải được ảnh lên.') : err?.message || 'Không tải được ảnh lên.')
+        } finally {
+            setUploading(false)
+        }
     }
 
     return (
@@ -58,8 +73,10 @@ export default function MarkdownEditor({ id, value, onChange, rows = 12 }) {
                         <button type="button" className="md-tool" onClick={() => linePrefix('## ')} aria-label="Tiêu đề">H</button>
                         <button type="button" className="md-tool" onClick={() => linePrefix('- ')} aria-label="Danh sách">•</button>
                         <button type="button" className="md-tool" onClick={() => insert(TABLE)} aria-label="Chèn bảng">Bảng</button>
-                        <button type="button" className="md-tool" onClick={() => fileInput.current?.click()}>Chèn ảnh</button>
-                        <input ref={fileInput} type="file" accept="image/*" hidden onChange={pickImage} />
+                        <button type="button" className="md-tool" onClick={() => fileInput.current?.click()} disabled={uploading}>
+                            {uploading ? 'Đang tải ảnh…' : 'Chèn ảnh'}
+                        </button>
+                        <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={pickImage} />
                     </div>
                 )}
             </div>
@@ -69,9 +86,10 @@ export default function MarkdownEditor({ id, value, onChange, rows = 12 }) {
                     placeholder="# Tiêu đề&#10;&#10;Nội dung bài đọc… Dùng **đậm**, danh sách, bảng; ảnh chèn bằng nút Chèn ảnh." />
             ) : (
                 <div className="md-editor__preview">
-                    {value.trim() ? <Markdown>{value}</Markdown> : <p className="text-2">Chưa có nội dung.</p>}
+                    {value.trim() ? <Markdown resolveFile={resolveFile}>{value}</Markdown> : <p className="text-2">Chưa có nội dung.</p>}
                 </div>
             )}
+            {uploadError && <span className="error" role="alert">{uploadError}</span>}
             <span className="small text-2">Hỗ trợ Markdown: tiêu đề (#), **đậm**, danh sách (-), bảng, ảnh. Không chạy mã HTML.</span>
         </div>
     )
