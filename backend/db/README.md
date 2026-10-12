@@ -5,15 +5,30 @@
 | `00_drop.sql` | Xóa toàn bộ schema (chỉ dùng dev/test) |
 | `01_schema.sql` | Tạo bảng, ràng buộc, index, view |
 | `02_seed.sql` | Dữ liệu mẫu (mật khẩu mọi tài khoản: `Password@123`) |
+| `03_test_accounts.sql` | Tài khoản kiểm thử cho từng tình huống (idempotent, chạy lại được) |
 
 ```bash
 # Cách 1: Docker (từ thư mục backend/). Schema + seed tự chạy ở lần khởi động đầu tiên
 docker compose up -d postgres
 docker compose down -v && docker compose up -d postgres   # reset DB về seed ban đầu
+# Thêm tài khoản kiểm thử vào DB đang chạy (không cần reset)
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' < db/03_test_accounts.sql
 
 # Cách 2: Postgres có sẵn
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f 01_schema.sql -f 02_seed.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f 01_schema.sql -f 02_seed.sql -f 03_test_accounts.sql
 ```
+
+### Tài khoản kiểm thử (mật khẩu `Password@123`)
+
+| Email | Vai trò | Trạng thái | Dùng để kiểm tra |
+|---|---|---|---|
+| `test.hocvien@xlearn.dev` | student | active | Màn học viên khi chưa ghi danh khóa nào |
+| `test.giangvien@xlearn.dev` | instructor | active | Màn giảng viên khi chưa có khóa học |
+| `test.quantri@xlearn.dev` | admin, instructor | active | Vào được cả `/teach` lẫn API `/admin/users` |
+| `test.tendai@xlearn.dev` | student | active | Tên rất dài: header, avatar chữ tắt, bảng |
+| `test.khongvaitro@xlearn.dev` | (không có) | active | Không vai trò: API giảng viên/admin trả 403 |
+| `test.bikhoa@xlearn.dev` | student | locked | Đăng nhập đúng mật khẩu vẫn bị chặn (403) |
+| `test.ngunghoatdong@xlearn.dev` | student | inactive | Như trên, trạng thái vô hiệu hóa |
 
 ## ERD
 
