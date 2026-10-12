@@ -2,8 +2,10 @@ import { useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ConfirmDialog } from '../../components/ui'
 import { useToast } from '../../components/hooks'
-import { getCourse, getQuizDraft } from '../../data/mock'
+import { getQuizDraft } from '../../data/mock'
 import { LETTERS } from '../learner/quiz'
+import { CourseLoadState } from './CourseHead'
+import { useTeachCourse } from './teachApi'
 import './teacher.css'
 
 const TL = { single_choice: 'MỘT ĐÁP ÁN', multiple_choice: 'NHIỀU ĐÁP ÁN', true_false: 'ĐÚNG / SAI', short_text: 'TỰ LUẬN NGẮN' }
@@ -13,7 +15,7 @@ const swap = (a, i, j) => { const b = [...a];[b[i], b[j]] = [b[j], b[i]]; return
 
 export default function QuizEditor() {
     const { courseId } = useParams()
-    const course = useMemo(() => getCourse(courseId), [courseId])
+    const { data: course, error, isPending } = useTeachCourse(courseId)
     const draft = useMemo(() => getQuizDraft(), [])
     const [title, setTitle] = useState(draft.title)
     const [graded, setGraded] = useState(draft.is_graded)
@@ -52,6 +54,8 @@ export default function QuizEditor() {
     }
 
     const confirmQIndex = confirm?.kind === 'q' ? qs.findIndex((q) => q.id === confirm.id) + 1 : 0
+
+    if (isPending || error) return <CourseLoadState error={error} />
 
     return (
         <>

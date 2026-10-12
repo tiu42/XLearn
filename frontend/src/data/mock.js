@@ -1,8 +1,9 @@
 // Dữ liệu mẫu, khớp cấu trúc và nội dung với backend/db/02_seed.sql.
 // Backend hiện có /auth, /admin/users, /me/courses (Khóa học của tôi, khối "gần đây" ở Dashboard),
 // /me/courses/:id (Trang khóa học), /me/courses/:id/lessons/:lessonId (Giao diện học),
-// …/lessons/:lessonId/quiz (Làm bài kiểm tra) và /me/timeline (Dòng thời gian ở Dashboard);
-// các màn còn lại (giảng viên…) tạm dùng dữ liệu này.
+// …/lessons/:lessonId/quiz (Làm bài kiểm tra), /me/timeline (Dòng thời gian ở Dashboard),
+// /teach/courses (danh sách + thêm/sửa/xóa khóa học của giảng viên, phần đầu trang quản lý khóa) và /departments;
+// các màn còn lại (nội dung khóa, học viên, soạn quiz…) tạm dùng dữ liệu này.
 // Khi có API, thay từng hàm get* bằng lời gọi api.get(...) tương ứng.
 //
 // Quy ước để lớp API chuyển đổi giữa DB và giao diện:
@@ -16,8 +17,6 @@
 //   - Ảnh trong bài đọc: Markdown tham chiếu ![mô tả](file:<storage_object_id>); resolveFileUrl() đổi sang URL.
 
 export const BRAND = { name: 'Học viện XLearn', logo: 'X' }
-
-const clone = (x) => structuredClone(x)
 
 /* --------------------------------------------------------------------------
  * Phòng ban (bảng departments)
@@ -74,20 +73,6 @@ export function registerLocalFile(file) {
     FILES.set(id, { name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} KB`, url: URL.createObjectURL(file) })
     return id
 }
-
-/* --------------------------------------------------------------------------
- * Khóa học (giảng viên)
- * ------------------------------------------------------------------------ */
-const COURSES = [
-    { id: 1, code: 'ATLD-01', title: 'An toàn lao động tại khu vực sản xuất', short_description: 'Nội quy an toàn, nhận diện mối nguy và sử dụng đúng thiết bị bảo hộ cá nhân.', description: '', department: 'HSE', is_mandatory: true, is_sequential: true, default_due_at: '2026-10-31', status: 'published', lessons: 9, tests: 2, learners: 10, done: 3, thumbnail_url: null, colors: ['#0F6CBF', '#2A82CF'] },
-    { id: 2, code: 'BMTT-2026', title: 'Bảo mật thông tin 2026', short_description: 'Nhận diện email lừa đảo, đặt mật khẩu mạnh và xác thực hai lớp.', description: '', department: 'CNTT', is_mandatory: true, is_sequential: false, default_due_at: '2026-10-18', status: 'published', lessons: 4, tests: 1, learners: 8, done: 2, thumbnail_url: null, colors: ['#5B3FD9', '#7259E0'] },
-    { id: 3, code: '5S-01', title: 'Quy trình 5S trong xưởng', short_description: 'Sàng lọc, sắp xếp, sạch sẽ, săn sóc, sẵn sàng tại nơi làm việc.', description: '', department: 'VH', is_mandatory: false, is_sequential: false, default_due_at: '2026-12-15', status: 'published', lessons: 5, tests: 1, learners: 4, done: 0, thumbnail_url: null, colors: ['#00798A', '#19909F'] },
-    { id: 4, code: 'SCC-01', title: 'Sơ cấp cứu tại nơi làm việc', short_description: 'Đánh giá hiện trường, hồi sức tim phổi và xử lý vết thương.', description: '', department: 'HSE', is_mandatory: false, is_sequential: false, default_due_at: '2026-11-30', status: 'published', lessons: 3, tests: 1, learners: 3, done: 2, thumbnail_url: null, colors: ['#3F6E2A', '#558541'] },
-    { id: 5, code: 'HC-02', title: 'An toàn hóa chất nâng cao', short_description: 'Nhãn GHS, phiếu an toàn hóa chất và lưu trữ đúng cách.', description: '', department: 'HSE', is_mandatory: true, is_sequential: false, default_due_at: '2027-01-15', status: 'draft', lessons: 2, tests: 0, learners: 0, done: 0, thumbnail_url: null, colors: ['#B54A00', '#C9631C'] },
-]
-
-export const getTeacherCourses = () => clone(COURSES)
-export const getCourse = (id) => clone(COURSES.find((c) => c.id === Number(id)) ?? COURSES[0])
 
 /* --------------------------------------------------------------------------
  * Nội dung mẫu khóa ATLD-01 (bài đọc, câu hỏi quiz) cho các màn giảng viên
