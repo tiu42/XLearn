@@ -406,6 +406,8 @@ class TimelineItemOut(BaseModel):
     lesson_id: int | None  # quiz
     title: str  # quiz: tên bài kiểm tra
     is_graded: bool | None  # quiz
+    locked: bool = False  # quiz: nằm trong chủ đề chưa mở khóa (khóa học tuần tự)
+    out_of_attempts: bool = False  # quiz: đã dùng hết lượt làm mà chưa đạt
 
 
 class TimelineOut(BaseModel):
