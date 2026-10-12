@@ -1,6 +1,6 @@
 // Dữ liệu mẫu, khớp cấu trúc và nội dung với backend/db/02_seed.sql.
-// Backend hiện có /auth, /admin/users và /me/courses (Khóa học của tôi, khối "gần đây" ở Dashboard);
-// các màn khóa học/học viên còn lại tạm dùng dữ liệu này.
+// Backend hiện có /auth, /admin/users, /me/courses (Khóa học của tôi, khối "gần đây" ở Dashboard)
+// và /me/courses/:id (Trang khóa học); các màn còn lại (giao diện học, giảng viên…) tạm dùng dữ liệu này.
 // Khi có API, thay từng hàm get* bằng lời gọi api.get(...) tương ứng.
 //
 // Quy ước để lớp API chuyển đổi giữa DB và giao diện:
@@ -28,8 +28,6 @@ export const DEPARTMENTS = [
     { code: 'NS', name: 'Nhân sự', short: 'Nhân sự' },
 ]
 export const deptShort = (code) => DEPARTMENTS.find((d) => d.code === code)?.short ?? code
-/** Nhãn danh mục khóa: "HSE · Bắt buộc" */
-export const courseCategory = (c) => `${deptShort(c.department)} · ${c.is_mandatory ? 'Bắt buộc' : 'Tự chọn'}`
 
 export const COURSE_STATUS = {
     published: { label: 'Đang mở', tone: 'green' },

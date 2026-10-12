@@ -3,9 +3,9 @@ import api from '../../api'
 import { deptShort } from '../../data/mock'
 
 /**
- * Khóa học của tôi: GET /me/courses. Mọi trang dùng chung cache với key ['my-courses', params].
- * Khi tiến độ học thay đổi (hoàn thành bài, nộp quiz…) gọi
- * queryClient.invalidateQueries({ queryKey: MY_COURSES_KEY }) để lần sau lấy số liệu mới.
+ * Khóa học của tôi: GET /me/courses (key ['my-courses', params]) và GET /me/courses/:id
+ * (key ['my-courses', 'detail', id]). Khi tiến độ học thay đổi (hoàn thành bài, nộp quiz…) gọi
+ * queryClient.invalidateQueries({ queryKey: MY_COURSES_KEY }) → cả danh sách lẫn trang khóa học lấy số liệu mới.
  */
 export const MY_COURSES_KEY = ['my-courses']
 
@@ -17,6 +17,13 @@ export const myCoursesQuery = (params) => ({
 })
 
 export const useMyCourses = (params) => useQuery({ ...myCoursesQuery(params), placeholderData: keepPreviousData })
+
+export const myCourseQuery = (id) => ({
+    queryKey: [...MY_COURSES_KEY, 'detail', String(id)],
+    queryFn: ({ signal }) => api.get(`/me/courses/${id}`, { signal }).then((r) => r.data),
+})
+
+export const useMyCourse = (id) => useQuery(myCourseQuery(id))
 
 // Nền sọc cho khóa chưa có ảnh bìa, chọn theo id để mỗi khóa giữ một màu cố định
 const PALETTE = [['#0F6CBF', '#2A82CF'], ['#5B3FD9', '#7259E0'], ['#00798A', '#19909F'], ['#3F6E2A', '#558541'], ['#B54A00', '#C9631C']]
