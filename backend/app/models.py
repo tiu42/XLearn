@@ -30,7 +30,6 @@ from sqlalchemy import (
     false,
     func,
     text,
-    true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -59,18 +58,33 @@ class Base(DeclarativeBase):
 # --------------------------------------------------------------------------- #
 # 1. Người dùng & phân quyền
 # --------------------------------------------------------------------------- #
+class Department(Base):
+    __tablename__ = "departments"
+    __table_args__ = (UniqueConstraint("code", name="uq_departments_code"),)
+
+    id: Mapped[int] = _pk()
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(150))
+    created_at: Mapped[datetime] = _created_at()
+
+
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
+        UniqueConstraint("employee_code", name="uq_users_employee_code"),
         CheckConstraint("email = LOWER(email)", name="ck_users_email_lower"),
         CheckConstraint("status IN ('active', 'inactive', 'locked')", name="ck_users_status"),
+        Index("ix_users_department", "department_id"),
     )
 
     id: Mapped[int] = _pk()
     email: Mapped[str] = mapped_column(String(255))
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(150))
+    employee_code: Mapped[str | None] = mapped_column(String(20))
+    department_id: Mapped[int | None] = mapped_column(
+        BigId, ForeignKey("departments.id", name="fk_users_department", ondelete="SET NULL"))
     avatar_url: Mapped[str | None] = mapped_column(String(1000))
     status: Mapped[str] = mapped_column(String(20), server_default="active")
     last_login_at: Mapped[datetime | None] = mapped_column(TZDateTime)
@@ -78,6 +92,7 @@ class User(Base):
     updated_at: Mapped[datetime] = _updated_at()
 
     roles: Mapped[list[Role]] = relationship(secondary="user_roles", viewonly=True)
+    department: Mapped[Department | None] = relationship()
 
 
 class Role(Base):
@@ -140,6 +155,7 @@ class Course(Base):
         CheckConstraint("status IN ('draft', 'published', 'archived')", name="ck_courses_status"),
         Index("ix_courses_status", "status"),
         Index("ix_courses_created_by", "created_by"),
+        Index("ix_courses_department", "department_id"),
     )
 
     id: Mapped[int] = _pk()
@@ -149,6 +165,11 @@ class Course(Base):
     description: Mapped[str | None] = mapped_column(Text)
     thumbnail_object_id: Mapped[int | None] = mapped_column(
         BigId, ForeignKey("storage_objects.id", name="fk_courses_thumb", ondelete="SET NULL"))
+    department_id: Mapped[int | None] = mapped_column(
+        BigId, ForeignKey("departments.id", name="fk_courses_department", ondelete="SET NULL"))
+    is_mandatory: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    is_sequential: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    default_due_at: Mapped[datetime | None] = mapped_column(TZDateTime)
     status: Mapped[str] = mapped_column(String(20), server_default="draft")
     published_at: Mapped[datetime | None] = mapped_column(TZDateTime)
     created_by: Mapped[int] = mapped_column(BigId, ForeignKey("users.id", name="fk_courses_creator"))
@@ -157,10 +178,14 @@ class Course(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(TZDateTime)
 
     thumbnail: Mapped[StorageObject | None] = relationship()
+    department: Mapped[Department | None] = relationship()
+    sections: Mapped[list[CourseSection]] = relationship(
+        back_populates="course", order_by="CourseSection.sort_order", passive_deletes=True)
     instructors: Mapped[list[CourseInstructor]] = relationship(
         back_populates="course", cascade="all, delete-orphan", passive_deletes=True)
+    # Bài học sắp theo chủ đề rồi theo thứ tự trong chủ đề → dùng course.sections[i].lessons
     lessons: Mapped[list[Lesson]] = relationship(
-        back_populates="course", order_by="Lesson.sort_order", passive_deletes=True)
+        back_populates="course", passive_deletes=True, overlaps="lessons,section")
 
 
 class CourseInstructor(Base):
@@ -184,24 +209,57 @@ class CourseInstructor(Base):
     user: Mapped[User] = relationship()
 
 
+class CourseSection(Base):
+    """Chủ đề (chương) của khóa học."""
+
+    __tablename__ = "course_sections"
+    __table_args__ = (
+        # Cho phép FK ghép từ lessons: chủ đề phải thuộc cùng khóa với bài học
+        UniqueConstraint("id", "course_id", name="uq_course_sections_id_course"),
+        Index("ix_course_sections_course_order", "course_id", "sort_order"),
+    )
+
+    id: Mapped[int] = _pk()
+    course_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("courses.id", name="fk_course_sections_course", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+    deleted_at: Mapped[datetime | None] = mapped_column(TZDateTime)
+
+    course: Mapped[Course] = relationship(back_populates="sections")
+    lessons: Mapped[list[Lesson]] = relationship(
+        back_populates="section", order_by="Lesson.sort_order", passive_deletes=True,
+        overlaps="course,lessons")
+
+
 class Lesson(Base):
     __tablename__ = "lessons"
     __table_args__ = (
-        CheckConstraint("lesson_type IN ('video', 'pdf', 'quiz')", name="ck_lessons_type"),
+        CheckConstraint("lesson_type IN ('video', 'pdf', 'page', 'quiz')", name="ck_lessons_type"),
         CheckConstraint("status IN ('draft', 'published')", name="ck_lessons_status"),
         CheckConstraint(
             "(lesson_type IN ('video', 'pdf') AND media_object_id IS NOT NULL)"
-            " OR (lesson_type = 'quiz' AND media_object_id IS NULL)",
+            " OR (lesson_type IN ('page', 'quiz') AND media_object_id IS NULL)",
             name="ck_lessons_media"),
-        Index("ix_lessons_course_order", "course_id", "sort_order"),
+        # FK ghép: chủ đề bắt buộc thuộc cùng khóa với bài học
+        ForeignKeyConstraint(["section_id", "course_id"], ["course_sections.id", "course_sections.course_id"],
+                             name="fk_lessons_section", ondelete="CASCADE"),
+        Index("ix_lessons_course", "course_id"),
+        Index("ix_lessons_section_order", "section_id", "sort_order"),
         Index("ix_lessons_media", "media_object_id"),
     )
 
     id: Mapped[int] = _pk()
     course_id: Mapped[int] = mapped_column(
         BigId, ForeignKey("courses.id", name="fk_lessons_course", ondelete="CASCADE"))
+    section_id: Mapped[int] = mapped_column(BigId)
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
+    # Bài đọc: Markdown; ảnh tham chiếu bằng ![…](file:<storage_object_id>) (xem db/01_schema.sql)
+    content: Mapped[str | None] = mapped_column(Text)
     lesson_type: Mapped[str] = mapped_column(String(20))
     media_object_id: Mapped[int | None] = mapped_column(
         BigId, ForeignKey("storage_objects.id", name="fk_lessons_media"))
@@ -215,9 +273,31 @@ class Lesson(Base):
     updated_at: Mapped[datetime] = _updated_at()
     deleted_at: Mapped[datetime | None] = mapped_column(TZDateTime)
 
-    course: Mapped[Course] = relationship(back_populates="lessons")
+    course: Mapped[Course] = relationship(back_populates="lessons", overlaps="lessons,section")
+    section: Mapped[CourseSection] = relationship(back_populates="lessons", overlaps="course,lessons")
     media: Mapped[StorageObject | None] = relationship()
+    files: Mapped[list[LessonFile]] = relationship(
+        order_by="LessonFile.sort_order", cascade="all, delete-orphan", passive_deletes=True)
     quiz: Mapped[Quiz | None] = relationship(back_populates="lesson", passive_deletes=True)
+
+
+class LessonFile(Base):
+    """File gắn với bài: tài liệu đính kèm (attachment) hoặc ảnh nhúng trong bài đọc (inline)."""
+
+    __tablename__ = "lesson_files"
+    __table_args__ = (
+        CheckConstraint("purpose IN ('attachment', 'inline')", name="ck_lesson_files_purpose"),
+        Index("ix_lesson_files_object", "storage_object_id"),
+    )
+
+    lesson_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("lessons.id", name="fk_lesson_files_lesson", ondelete="CASCADE"), primary_key=True)
+    storage_object_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("storage_objects.id", name="fk_lesson_files_object"), primary_key=True)
+    purpose: Mapped[str] = mapped_column(String(20), server_default="attachment")
+    sort_order: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+
+    storage_object: Mapped[StorageObject] = relationship()
 
 
 # --------------------------------------------------------------------------- #
@@ -228,6 +308,8 @@ class Quiz(Base):
     __table_args__ = (
         CheckConstraint("pass_score_percent BETWEEN 0 AND 100", name="ck_quizzes_pass"),
         CheckConstraint("max_attempts IS NULL OR max_attempts > 0", name="ck_quizzes_attempts"),
+        CheckConstraint("opens_at IS NULL OR closes_at IS NULL OR closes_at > opens_at", name="ck_quizzes_window"),
+        CheckConstraint("review_policy IN ('after_submit', 'after_close', 'never')", name="ck_quizzes_review"),
     )
 
     lesson_id: Mapped[int] = mapped_column(
@@ -236,7 +318,10 @@ class Quiz(Base):
     time_limit_seconds: Mapped[int | None] = mapped_column(Integer)
     max_attempts: Mapped[int | None] = mapped_column(Integer)
     shuffle_questions: Mapped[bool] = mapped_column(Boolean, server_default=false())
-    show_correct_answers: Mapped[bool] = mapped_column(Boolean, server_default=true())
+    is_graded: Mapped[bool] = mapped_column(Boolean, server_default=false())  # FALSE = quiz luyện tập
+    opens_at: Mapped[datetime | None] = mapped_column(TZDateTime)
+    closes_at: Mapped[datetime | None] = mapped_column(TZDateTime)
+    review_policy: Mapped[str] = mapped_column(String(20), server_default="after_submit")
 
     lesson: Mapped[Lesson] = relationship(back_populates="quiz")
     questions: Mapped[list[QuizQuestion]] = relationship(
@@ -247,7 +332,8 @@ class Quiz(Base):
 class QuizQuestion(Base):
     __tablename__ = "quiz_questions"
     __table_args__ = (
-        CheckConstraint("question_type IN ('single_choice', 'multiple_choice', 'true_false')",
+        # short_text: quiz_options của câu là các đáp án được chấp nhận (đều is_correct = TRUE)
+        CheckConstraint("question_type IN ('single_choice', 'multiple_choice', 'true_false', 'short_text')",
                         name="ck_quiz_questions_type"),
         CheckConstraint("points >= 0", name="ck_quiz_questions_points"),
         Index("ix_quiz_questions_quiz", "quiz_id", "sort_order"),
@@ -370,6 +456,8 @@ class QuizAttempt(Base):
     quiz: Mapped[Quiz] = relationship()
     answers: Mapped[list[QuizAttemptAnswer]] = relationship(
         back_populates="attempt", cascade="all, delete-orphan", passive_deletes=True)
+    text_answers: Mapped[list[QuizAttemptTextAnswer]] = relationship(
+        back_populates="attempt", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class QuizAttemptAnswer(Base):
@@ -390,3 +478,20 @@ class QuizAttemptAnswer(Base):
     answered_at: Mapped[datetime] = _created_at()
 
     attempt: Mapped[QuizAttempt] = relationship(back_populates="answers")
+
+
+class QuizAttemptTextAnswer(Base):
+    """Câu trả lời tự luận ngắn (question_type = 'short_text')."""
+
+    __tablename__ = "quiz_attempt_text_answers"
+    __table_args__ = (Index("ix_qata_question", "question_id"),)
+
+    attempt_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("quiz_attempts.id", name="fk_qata_attempt", ondelete="CASCADE"), primary_key=True)
+    question_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("quiz_questions.id", name="fk_qata_question"), primary_key=True)
+    answer_text: Mapped[str] = mapped_column(String(1000))
+    is_correct: Mapped[bool | None] = mapped_column(Boolean)  # NULL = chưa chấm
+    answered_at: Mapped[datetime] = _created_at()
+
+    attempt: Mapped[QuizAttempt] = relationship(back_populates="text_answers")

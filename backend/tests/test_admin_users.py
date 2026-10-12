@@ -94,3 +94,53 @@ def test_reset_mat_khau(api, admin, seeded_db):
 def test_user_khong_ton_tai(api, admin):
     assert api.get("/admin/users/9999", headers=admin).status_code == 404
     assert api.patch("/admin/users/9999", headers=admin, json={"full_name": "X"}).status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Mã nhân viên & phòng ban
+# --------------------------------------------------------------------------- #
+def test_tao_tai_khoan_co_ma_nv_va_phong_ban(api, admin, dept_ids):
+    r = api.post("/admin/users", headers=admin, json={
+        "email": "nv@x.dev", "full_name": "NV", "password": "Password@1", "roles": ["student"],
+        "employee_code": " nv0815 ", "department_id": dept_ids["HSE"]})
+    assert r.status_code == 201
+    assert r.json()["employee_code"] == "NV0815"  # bỏ khoảng trắng, viết hoa
+    assert r.json()["department"] == {"id": dept_ids["HSE"], "code": "HSE", "name": "An toàn"}
+    # Tìm được theo mã nhân viên
+    assert api.get("/admin/users?q=nv0815", headers=admin).json()["items"][0]["email"] == "nv@x.dev"
+
+
+@pytest.mark.parametrize("payload,code", [
+    ({"employee_code": "nv0001"}, 409),           # trùng mã NV của hv@x.dev (so sánh sau khi viết hoa)
+    ({"employee_code": "   "}, 422),              # chỉ có khoảng trắng
+    ({"employee_code": "X" * 21}, 422),
+    ({"department_id": 9999}, 422),               # phòng ban không tồn tại
+])
+def test_tao_tai_khoan_ma_nv_phong_ban_khong_hop_le(api, admin, payload, code):
+    body = {"email": "new@x.dev", "full_name": "N", "password": "Password@1", "roles": ["student"], **payload}
+    assert api.post("/admin/users", headers=admin, json=body).status_code == code
+
+
+def test_sua_ma_nv_va_phong_ban(api, admin, seeded_db, dept_ids):
+    uid = seeded_db["gv@x.dev"]
+    r = api.patch(f"/admin/users/{uid}", headers=admin, json={"employee_code": "GV0002", "department_id": dept_ids["HSE"]})
+    assert r.status_code == 200 and r.json()["employee_code"] == "GV0002" and r.json()["department"]["code"] == "HSE"
+    # Trường không gửi thì giữ nguyên
+    r = api.patch(f"/admin/users/{uid}", headers=admin, json={"full_name": "GV mới"})
+    assert r.json()["employee_code"] == "GV0002" and r.json()["department"]["code"] == "HSE"
+    # Gửi null thì xóa giá trị
+    r = api.patch(f"/admin/users/{uid}", headers=admin, json={"employee_code": None, "department_id": None})
+    assert r.status_code == 200 and r.json()["employee_code"] is None and r.json()["department"] is None
+
+
+def test_sua_ma_nv_trung_va_giu_ma_cu_cua_chinh_minh(api, admin, seeded_db):
+    assert api.patch(f"/admin/users/{seeded_db['gv@x.dev']}", headers=admin,
+                     json={"employee_code": "NV0001"}).status_code == 409
+    # Gửi lại đúng mã của chính mình không bị coi là trùng
+    assert api.patch(f"/admin/users/{seeded_db['hv@x.dev']}", headers=admin,
+                     json={"employee_code": "NV0001"}).status_code == 200
+
+
+def test_sua_phong_ban_khong_ton_tai(api, admin, seeded_db):
+    assert api.patch(f"/admin/users/{seeded_db['hv@x.dev']}", headers=admin,
+                     json={"department_id": 9999}).status_code == 422

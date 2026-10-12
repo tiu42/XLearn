@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 
 def _lower_email(value: str) -> str:
@@ -24,6 +24,8 @@ NewEmail = Annotated[EmailStr, AfterValidator(_lower_email)]
 NewPassword = Annotated[str, Field(min_length=8), AfterValidator(_bcrypt_limit)]
 UserStatus = Literal["active", "inactive", "locked"]
 RoleCodes = Annotated[list[str], Field(min_length=1)]
+# Mã nhân viên: bỏ khoảng trắng, viết hoa (nv0412 → NV0412) để UNIQUE không bị lách bằng chữ thường
+EmployeeCode = Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True, min_length=1, max_length=20)]
 
 
 # --------------------------------------------------------------------------- #
@@ -50,12 +52,22 @@ class TokenResponse(BaseModel):
     expires_in: int = Field(description="Số giây access token còn hiệu lực")
 
 
+class DepartmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     email: str
     full_name: str
+    employee_code: str | None
+    department: DepartmentOut | None
     avatar_url: str | None
     status: str
     roles: list[str]
@@ -65,7 +77,8 @@ class UserOut(BaseModel):
     @classmethod
     def from_user(cls, user) -> UserOut:
         return cls.model_validate({
-            **{f: getattr(user, f) for f in cls.model_fields if f != "roles"},
+            **{f: getattr(user, f) for f in cls.model_fields if f not in ("roles", "department")},
+            "department": user.department,
             "roles": sorted(r.code for r in user.roles),
         })
 
@@ -82,12 +95,18 @@ class AdminUserCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
     password: NewPassword
     roles: RoleCodes
+    employee_code: EmployeeCode | None = None
+    department_id: int | None = None
 
 
 class AdminUserUpdate(BaseModel):
+    """Trường bỏ trống = giữ nguyên. Riêng employee_code / department_id: gửi null = xóa giá trị."""
+
     full_name: str | None = Field(default=None, min_length=1, max_length=150)
     status: UserStatus | None = None
     roles: RoleCodes | None = None
+    employee_code: EmployeeCode | None = None
+    department_id: int | None = None
 
 
 class ResetPasswordRequest(BaseModel):

@@ -1,0 +1,73 @@
+.course-head { background: #fff; border-bottom: 1px solid var(--border); }
+.course-head__inner { max-width: 1280px; margin: 0 auto; padding: 18px 32px 0; display: flex; flex-direction: column; gap: 10px; }
+.course-head__inner--pad { padding-bottom: 18px; }
+@media (max-width: 640px) { .course-head__inner { padding: 16px 16px 0; } }
+.course-head h1 { font-size: 26px; font-weight: 700; }
+.sub-nav { display: flex; gap: 4px; }
+.sub-nav a {
+  display: flex; align-items: center; min-height: 46px; padding: 0 14px; color: var(--text-2);
+  font-size: 15px; text-decoration: none; border-bottom: 3px solid transparent;
+}
+.sub-nav a.active { color: var(--text); font-weight: 700; border-bottom-color: var(--primary); }
+
+.legend-row { display: flex; align-items: center; gap: 10px; }
+.legend-row .sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.dist-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: var(--track); }
+.by-lesson { display: grid; grid-template-columns: minmax(0, 1fr) 160px 44px; align-items: center; gap: 12px; font-size: 14px; }
+.by-lesson > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 640px) { .by-lesson { grid-template-columns: minmax(0, 1fr) 80px 40px; } }
+.type-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 4px; }
+.tag-video { background: #E0F3F5; color: #005A66; }
+.tag-page { background: #E8EEF7; color: #2F4B7C; }
+.tag-quiz { background: #FCE4EF; color: #A0144F; }
+.tag-exam { background: var(--warn-bg); color: var(--warn); }
+.tag-text { background: #F3EAFB; color: #5B2A86; }
+.tag-pdf { background: #FBE3E1; color: #8E1F14; }
+
+.sel-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-soft); border-bottom: 1px solid var(--primary-border); }
+.person { display: flex; align-items: center; gap: 10px; }
+.person a { font-weight: 600; text-decoration: none; }
+
+/* Nội dung khóa */
+.topic-box__head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border-soft); }
+.topic-box ul { list-style: none; margin: 0; padding: 0; }
+.topic-box li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 16px; border-bottom: 1px solid #F1F3F5; }
+.item-tag { flex: none; min-width: 74px; text-align: center; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; padding: 5px 8px; border-radius: 6px; }
+.radio-card {
+  flex: 1; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: 6px; font-size: 15px; cursor: pointer;
+  border: 1px solid var(--input-soft); background: #fff;
+}
+.radio-card.is-on { border: 2px solid var(--primary); background: var(--primary-soft); }
+.radio-card input { width: 18px; height: 18px; accent-color: var(--primary); }
+.file-input { font-size: 13px; padding: 12px; border: 2px dashed var(--input-soft); border-radius: 6px; }
+
+/* Soạn bài kiểm tra */
+.qe-layout { flex: 1; width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px 32px 56px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
+@media (max-width: 640px) { .qe-layout { padding: 20px 16px 40px; } }
+.qe-card { background: #fff; border-radius: 8px; border: 1px solid var(--border); }
+.qe-card.is-open { border: 2px solid var(--primary); }
+.qe-card.is-invalid { border-color: var(--danger-border); }
+.qe-toggle {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 4px; border: 0;
+  background: transparent; color: var(--text); text-align: left;
+}
+.qe-num { flex: none; width: 30px; height: 30px; border-radius: 50%; background: #F1F3F5; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+.qe-chip { flex: none; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; padding: 4px 8px; border-radius: 6px; }
+.qe-preview { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qe-body { border-top: 1px solid var(--border-soft); padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+.qe-body fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.qe-body legend { padding: 0; margin-bottom: 4px; font-size: 14px; font-weight: 600; }
+.qe-opt { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: #FBFCFD; border: 1px solid var(--border-soft); }
+.qe-opt.is-correct { background: var(--success-bg); border-color: var(--success-border); }
+.qe-opt .correct-label { display: flex; align-items: center; gap: 6px; min-height: 40px; font-size: 13px; font-weight: 600; cursor: pointer; flex: none; color: var(--success-pill); }
+.qe-opt .correct-label input { width: 18px; height: 18px; accent-color: var(--success); margin: 0; }
+.qe-letter { flex: none; width: 26px; height: 26px; border-radius: 6px; background: #F1F3F5; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+.x-btn { width: 36px; height: 36px; flex: none; border: 1px solid var(--danger-border); border-radius: 6px; background: #fff; font-size: 18px; color: var(--danger); }
+.x-btn:disabled { border-color: #E2E6EA; color: #ADB5BD; background: #fff; }
+.add-q { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; border: 2px dashed var(--dash-border); border-radius: 8px; background: #fff; }
+.qe-side { flex: 1 1 320px; min-width: 0; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px; }
+.topic-box li.is-draft { background: #FBFCFD; }
+.topic-box li.is-draft .item-tag { opacity: .6; }
+.att-edit { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.att-edit li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 4px 10px; border: 1px solid var(--border-soft); border-radius: 6px; font-size: 14px; }
+.file-input.is-invalid { border-color: var(--danger); }
