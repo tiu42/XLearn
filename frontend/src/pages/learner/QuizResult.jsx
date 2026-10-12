@@ -1,34 +1,51 @@
 import { useState } from 'react'
+import { errorMessage } from '../../api'
 import { ChevronLeft } from '../../components/Icons'
-import { duration, isAnswered, isMulti, isRight, isText, LETTERS, TYPE_LABEL } from './quiz'
+import { duration, fmtDateTime, fmtScore, isMulti, isText, LETTERS, TYPE_LABEL } from './quiz'
+import { useQuizResult, useQuizStatus } from './quizApi'
 
-/** Kết quả lần làm gần nhất + xem lại đáp án (lọc câu sai). */
-// quizzes.review_policy: chỉ 'after_submit' mới cho xem đáp án ngay sau khi nộp
+/** Kết quả một lượt đã nộp + xem lại đáp án (lọc câu sai) khi review_policy cho phép. */
 const REVIEW_NOTE = {
-    after_close: 'Đáp án và giải thích sẽ hiện sau khi bài kiểm tra đóng.',
-    never: 'Giảng viên không công bố đáp án cho bài kiểm tra này.',
+    after_close: (closes) => `Đáp án và giải thích sẽ hiện sau khi bài kiểm tra đóng${closes ? ` (${fmtDateTime(closes)})` : ''}.`,
+    never: () => 'Giảng viên không công bố đáp án cho bài kiểm tra này.',
 }
 
-export default function QuizResult({ title, questions, attempt, attemptNo, allowed, pass, triesLeft, reviewPolicy = 'after_submit', onRetry, onNext, onExit }) {
-    const [filter, setFilter] = useState('all')
-    const total = questions.length
-    const pct = attempt.pct
-    const passed = attempt.ok
-    const wrongIdx = questions.map((q, i) => (isRight(q, attempt.ans[i]) ? -1 : i)).filter((i) => i >= 0)
-    const shown = filter === 'wrong' ? wrongIdx : questions.map((_, i) => i)
-    const triesShort = allowed === 0 ? 'không giới hạn lượt' : `còn ${triesLeft} lượt`
+export default function QuizResult({ courseId, lessonId, attemptId, title, closesAt, onRetry, onNext, onExit }) {
+    const { data: attempt, error } = useQuizResult(courseId, lessonId, attemptId)
+    const { data: status } = useQuizStatus(courseId, lessonId)
+
+    const bar = (
+        <header className="focus-bar">
+            <div className="focus-bar__row">
+                <button type="button" className="btn" onClick={onExit} style={{ minHeight: 44, padding: '0 12px', borderRadius: 8 }}>
+                    <ChevronLeft />Quay lại bài học
+                </button>
+                <span className="focus-bar__title">Kết quả · {title}</span>
+            </div>
+        </header>
+    )
+    if (error) {
+        return (
+            <div className="focus-page">{bar}
+                <div className="center-state"><div role="alert" className="status-msg status-msg--error">{errorMessage(error, 'Không tải được kết quả.')}</div></div>
+            </div>
+        )
+    }
+    if (!attempt) return <div className="focus-page">{bar}<div className="center-state">Đang tải kết quả…</div></div>
+
+    const passed = attempt.passed
+    const left = status?.attempts_left // null = không giới hạn
+    const canRetry = status?.can_start || !!status?.in_progress
+    const retryLabel = status?.in_progress ? 'Làm tiếp lượt dở' : left == null ? 'Làm lại' : `Làm lại · còn ${left} lượt`
+    const blocked = status && !canRetry ? {
+        no_attempts: 'Đã hết lượt làm bài. Liên hệ giảng viên để được mở thêm lượt.',
+        closed: 'Bài kiểm tra đã đóng.',
+        not_open: 'Bài kiểm tra chưa mở.',
+    }[status.blocked_reason] : null
 
     return (
         <div className="focus-page">
-            <header className="focus-bar">
-                <div className="focus-bar__row">
-                    <button type="button" className="btn" onClick={onExit} style={{ minHeight: 44, padding: '0 12px', borderRadius: 8 }}>
-                        <ChevronLeft />Quay lại bài học
-                    </button>
-                    <span className="focus-bar__title">Kết quả · {title}</span>
-                </div>
-            </header>
-
+            {bar}
             <main style={{ flex: 1, width: '100%', maxWidth: 760, margin: '0 auto', padding: '32px 20px 64px', display: 'flex', flexDirection: 'column', gap: 24 }}>
                 <section aria-labelledby="res" className={`result-box${passed ? ' result-box--pass' : ''}`}>
                     <div className="row" style={{ gap: 20 }}>
@@ -36,61 +53,66 @@ export default function QuizResult({ title, questions, attempt, attemptNo, allow
                         <div style={{ flex: '1 1 260px', display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <h1 id="res" style={{ fontSize: 24, fontWeight: 800 }}>{passed ? 'Chúc mừng, bạn đã đạt!' : 'Bạn chưa đạt lần này'}</h1>
                             <span className="text-2" style={{ fontSize: 15, lineHeight: 1.5 }}>
-                                {attempt.timeout && 'Hết giờ, bài làm đã được tự động nộp. '}
-                                {passed ? 'Bài kiểm tra đã được tự động đánh dấu hoàn thành.' : 'Xem lại các câu sai bên dưới và ôn lại bài học trước khi làm lại.'}
+                                {attempt.status === 'expired' && 'Hết giờ, bài làm đã được tự động nộp. '}
+                                {passed ? 'Bài kiểm tra đã được tự động đánh dấu hoàn thành.'
+                                    : status?.passed ? 'Bạn đã đạt ở lượt trước nên bài kiểm tra vẫn được tính hoàn thành.'
+                                        : 'Ôn lại bài học trước khi làm lại.'}
                             </span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                            <span style={{ fontSize: 44, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
-                            <span className="small muted">Điểm đạt: {pass}%</span>
+                            <span style={{ fontSize: 44, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{fmtScore(attempt.score_percent)}%</span>
+                            <span className="small muted">Điểm đạt: {fmtScore(attempt.pass_score_percent)}%</span>
                         </div>
                     </div>
                     <div className="result-facts">
-                        <div><span className="small muted">Câu đúng</span><span style={{ fontSize: 18, fontWeight: 700 }}>{attempt.correct}/{total} · {attempt.score}/{attempt.max} điểm</span></div>
-                        <div><span className="small muted">Thời gian làm</span><span style={{ fontSize: 18, fontWeight: 700 }}>{duration(attempt.used)}</span></div>
-                        <div><span className="small muted">Lượt làm</span><span style={{ fontSize: 18, fontWeight: 700 }}>Lần {attemptNo}{allowed === 0 ? '' : `/${allowed}`}</span></div>
+                        <div><span className="small muted">Câu đúng</span><span style={{ fontSize: 18, fontWeight: 700 }}>{attempt.correct_count}/{attempt.question_count} · {fmtScore(attempt.score)}/{fmtScore(attempt.max_score)} điểm</span></div>
+                        <div><span className="small muted">Thời gian làm</span><span style={{ fontSize: 18, fontWeight: 700 }}>{duration(attempt.time_spent_seconds)}</span></div>
+                        <div><span className="small muted">Lượt làm</span><span style={{ fontSize: 18, fontWeight: 700 }}>Lần {attempt.attempt_no}{status?.attempts_left != null ? `/${status.attempts_used + status.attempts_left}` : ''}</span></div>
                     </div>
                     <div className="row" style={{ gap: 12 }}>
-                        {passed && <button type="button" className="btn btn--primary btn--lg" style={{ fontSize: 15 }} onClick={onNext}>Bài tiếp theo</button>}
-                        {triesLeft > 0 && (
+                        {passed && onNext && <button type="button" className="btn btn--primary btn--lg" style={{ fontSize: 15 }} onClick={onNext}>Bài tiếp theo</button>}
+                        {canRetry && (
                             <button type="button" className={`btn btn--lg${passed ? '' : ' btn--primary'}`} style={{ fontSize: 15, padding: '0 22px' }} onClick={onRetry}>
-                                Làm lại · {triesShort}
+                                {retryLabel}
                             </button>
                         )}
-                        {!passed && triesLeft <= 0 && (
-                            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger-dark)', alignSelf: 'center' }}>
-                                Đã hết lượt làm bài. Liên hệ giảng viên để được mở thêm lượt.
-                            </span>
+                        {blocked && !passed && (
+                            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger-dark)', alignSelf: 'center' }}>{blocked}</span>
                         )}
                         <button type="button" className="btn" style={{ minHeight: 48, padding: '0 20px', fontSize: 15, borderRadius: 8 }} onClick={onExit}>Xem lại bài học</button>
                     </div>
                 </section>
 
-                {reviewPolicy !== 'after_submit' ? (
-                    <p className="review-note">{REVIEW_NOTE[reviewPolicy]}</p>
-                ) : (
-                <section aria-labelledby="rv" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div className="row-between">
-                        <h2 id="rv" style={{ fontSize: 19, fontWeight: 700 }}>Xem lại đáp án</h2>
-                        <div role="group" aria-label="Lọc câu hỏi" className="seg">
-                            <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>Tất cả ({total})</button>
-                            <button type="button" aria-pressed={filter === 'wrong'} onClick={() => setFilter('wrong')}>Câu sai ({wrongIdx.length})</button>
-                        </div>
-                    </div>
-                    {filter === 'wrong' && wrongIdx.length === 0 && (
-                        <div style={{ padding: 20, borderRadius: 12, background: '#fff', textAlign: 'center' }} className="text-2">Không có câu sai nào.</div>
-                    )}
-                    {shown.map((i) => <ReviewCard key={i} q={questions[i]} num={i + 1} mine={attempt.ans[i]} />)}
-                </section>
-                )}
+                {attempt.questions ? <Review questions={attempt.questions} />
+                    : <p className="review-note">{(REVIEW_NOTE[attempt.review_policy] ?? REVIEW_NOTE.never)(closesAt)}</p>}
             </main>
         </div>
     )
 }
 
-function ReviewCard({ q, num, mine }) {
-    const ok = isRight(q, mine)
-    const has = isAnswered(q, mine)
+function Review({ questions }) {
+    const [filter, setFilter] = useState('all')
+    const wrong = questions.filter((q) => !q.correct)
+    const shown = filter === 'wrong' ? wrong : questions
+    return (
+        <section aria-labelledby="rv" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="row-between">
+                <h2 id="rv" style={{ fontSize: 19, fontWeight: 700 }}>Xem lại đáp án</h2>
+                <div role="group" aria-label="Lọc câu hỏi" className="seg">
+                    <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>Tất cả ({questions.length})</button>
+                    <button type="button" aria-pressed={filter === 'wrong'} onClick={() => setFilter('wrong')}>Câu sai ({wrong.length})</button>
+                </div>
+            </div>
+            {filter === 'wrong' && wrong.length === 0 && (
+                <div style={{ padding: 20, borderRadius: 12, background: '#fff', textAlign: 'center' }} className="text-2">Không có câu sai nào.</div>
+            )}
+            {shown.map((q) => <ReviewCard key={q.id} q={q} num={questions.indexOf(q) + 1} />)}
+        </section>
+    )
+}
+
+function ReviewCard({ q, num }) {
+    const ok = q.correct
     const multi = isMulti(q)
     return (
         <article className="review-card">
@@ -99,37 +121,38 @@ function ReviewCard({ q, num, mine }) {
                     <span className="small strong muted">Câu {num}</span>
                     <span className={`q-type${multi ? ' q-type--multi' : ''}`}>
                         {!isText(q) && <span aria-hidden="true" className={`q-mark q-mark--sm${multi ? ' q-mark--check' : ''}`} />}
-                        {TYPE_LABEL[q.t]}
+                        {TYPE_LABEL[q.question_type]}
                     </span>
+                    <span className="small muted">{q.earned_points}/{q.points} điểm</span>
                 </span>
-                <span className={`pill ${ok ? 'pill--success' : 'pill--red'}`} style={{ padding: '4px 10px' }}>{ok ? 'Đúng' : !has ? 'Bỏ trống' : 'Sai'}</span>
+                <span className={`pill ${ok ? 'pill--success' : 'pill--red'}`} style={{ padding: '4px 10px' }}>{ok ? 'Đúng' : !q.answered ? 'Bỏ trống' : 'Sai'}</span>
             </div>
-            <h3 style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.5 }}>{q.q}</h3>
+            <h3 style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.5 }}>{q.content}</h3>
             {isText(q) ? (
                 <div className="stack" style={{ gap: 8 }}>
                     <div className="answer-box" style={ok
                         ? { border: '2px solid var(--success)', background: 'var(--success-bg)', color: 'var(--success-pill)' }
                         : { border: '2px solid var(--danger)', background: 'var(--danger-bg)', color: 'var(--danger-dark)' }}>
                         <span style={{ fontSize: 12, fontWeight: 700 }}>Câu trả lời của bạn</span>
-                        <span style={{ fontSize: 15, color: 'var(--text)' }}>{has ? mine : '(Bỏ trống)'}</span>
+                        <span style={{ fontSize: 15, color: 'var(--text)' }}>{q.answered ? q.text : '(Bỏ trống)'}</span>
                     </div>
                     <div className="answer-box" style={{ border: '1px solid var(--success-border)', background: 'var(--success-bg)' }}>
                         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--success-pill)' }}>Đáp án chấp nhận</span>
-                        <span style={{ fontSize: 15 }}>{q.accept.join(' / ')}</span>
+                        <span style={{ fontSize: 15 }}>{q.accepted_answers.join(' / ')}</span>
                     </div>
                 </div>
             ) : (
                 <div className="stack" style={{ gap: 8 }}>
-                    {q.o.map((text, k) => {
-                        const right = multi ? q.c.includes(k) : k === q.c
-                        const chosen = multi ? !!mine?.includes(k) : k === mine
+                    {q.options.map((o, k) => {
+                        const right = o.is_correct
+                        const chosen = q.selected_option_ids.includes(o.id)
                         const chosenWrong = chosen && !right
                         const missed = multi && right && !chosen
                         const tag = chosenWrong ? 'Bạn chọn · Sai' : chosen ? 'Bạn chọn · Đúng' : missed ? 'Đáp án đúng · bạn bỏ sót' : 'Đáp án đúng'
                         return (
-                            <div key={k} className={`review-opt${right ? ' review-opt--right' : chosenWrong ? ' review-opt--wrong' : ''}`}>
+                            <div key={o.id} className={`review-opt${right ? ' review-opt--right' : chosenWrong ? ' review-opt--wrong' : ''}`}>
                                 <span className={`q-letter${multi ? ' q-letter--sq' : ''}`}>{LETTERS[k]}</span>
-                                <span style={{ flex: 1, fontSize: 15, lineHeight: 1.5 }}>{text}</span>
+                                <span style={{ flex: 1, fontSize: 15, lineHeight: 1.5 }}>{o.content}</span>
                                 {(right || chosenWrong) && (
                                     <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', color: right ? 'var(--success-pill)' : 'var(--danger-dark)' }}>{tag}</span>
                                 )}
@@ -138,7 +161,7 @@ function ReviewCard({ q, num, mine }) {
                     })}
                 </div>
             )}
-            <div className="explain"><span style={{ fontWeight: 700, flex: 'none' }}>Giải thích:</span><span>{q.e}</span></div>
+            {q.explanation && <div className="explain"><span style={{ fontWeight: 700, flex: 'none' }}>Giải thích:</span><span>{q.explanation}</span></div>}
         </article>
     )
 }

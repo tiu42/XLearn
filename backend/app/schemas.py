@@ -273,3 +273,140 @@ class LessonProgressResultOut(BaseModel):
     lesson_id: int
     progress: LessonProgressOut
     course: CourseProgressOut
+
+
+# --------------------------------------------------------------------------- #
+# Làm bài kiểm tra (học viên)
+# --------------------------------------------------------------------------- #
+QuestionType = Literal["single_choice", "multiple_choice", "true_false", "short_text"]
+AttemptStatus = Literal["in_progress", "submitted", "expired"]
+# Lý do không bắt đầu được lượt mới: chưa mở / đã đóng / hết lượt / chưa có câu hỏi
+QuizBlockReason = Literal["not_open", "closed", "no_attempts", "no_questions"]
+
+
+class QuizAnswerIn(BaseModel):
+    question_id: int
+    option_ids: list[int] = Field(default_factory=list, max_length=20,
+                                  description="Câu trắc nghiệm: id phương án đã chọn")
+    text: str | None = Field(default=None, max_length=1000, description="Câu tự luận ngắn")
+
+
+class QuizAnswersIn(BaseModel):
+    """Toàn bộ bài làm hiện tại (thay cho bản đã lưu). Câu không có trong danh sách = bỏ trống."""
+
+    answers: list[QuizAnswerIn] = Field(default_factory=list, max_length=500)
+
+
+class QuizAnswerOut(BaseModel):
+    question_id: int
+    option_ids: list[int]
+    text: str | None
+
+
+class QuizAttemptSummaryOut(BaseModel):
+    id: int
+    attempt_no: int
+    status: AttemptStatus
+    score: float | None
+    max_score: float | None
+    score_percent: float | None
+    passed: bool | None
+    started_at: datetime
+    submitted_at: datetime | None
+    expires_at: datetime | None  # hạn nộp; None = không giới hạn
+
+
+class QuizStatusOut(BaseModel):
+    attempts: list[QuizAttemptSummaryOut]  # lượt mới nhất trước
+    attempts_used: int
+    attempts_left: int | None  # None = không giới hạn
+    in_progress: QuizAttemptSummaryOut | None  # lượt đang làm dở (làm tiếp được)
+    can_start: bool  # bắt đầu được lượt mới (khi không có lượt đang làm dở)
+    blocked_reason: QuizBlockReason | None
+    best_score_percent: float | None
+    passed: bool  # đã có lượt đạt
+    review_available: bool  # các lượt đã nộp xem được đáp án chưa
+    server_time: datetime
+
+
+class QuizOptionOut(BaseModel):
+    id: int
+    content: str
+
+
+class QuizQuestionOut(BaseModel):
+    """Câu hỏi khi đang làm bài: không có đáp án đúng."""
+
+    id: int
+    question_type: QuestionType
+    content: str
+    points: int
+    options: list[QuizOptionOut]  # short_text: rỗng
+
+
+class QuizAttemptOut(QuizAttemptSummaryOut):
+    """Lượt đang làm: câu hỏi (theo thứ tự của lượt) + bài làm đã lưu."""
+
+    time_limit_seconds: int | None
+    questions: list[QuizQuestionOut]
+    answers: list[QuizAnswerOut]
+    server_time: datetime  # máy khách tính độ lệch đồng hồ để đếm ngược đúng
+
+
+class QuizAnswersSavedOut(BaseModel):
+    saved_at: datetime
+    expires_at: datetime | None
+
+
+class QuizReviewOptionOut(QuizOptionOut):
+    is_correct: bool
+
+
+class QuizReviewQuestionOut(BaseModel):
+    id: int
+    question_type: QuestionType
+    content: str
+    points: int
+    explanation: str | None
+    options: list[QuizReviewOptionOut]  # short_text: rỗng (đáp án ở accepted_answers)
+    accepted_answers: list[str]  # short_text: các đáp án được chấp nhận
+    selected_option_ids: list[int]
+    text: str | None
+    answered: bool
+    correct: bool
+    earned_points: int
+
+
+class QuizAttemptResultOut(QuizAttemptSummaryOut):
+    question_count: int
+    answered_count: int
+    correct_count: int
+    time_spent_seconds: int
+    pass_score_percent: float
+    review_policy: str
+    review_available: bool
+    questions: list[QuizReviewQuestionOut] | None  # None = chưa/không được xem đáp án
+
+
+class QuizSubmitOut(BaseModel):
+    attempt: QuizAttemptResultOut
+    progress: LessonProgressOut
+    course: CourseProgressOut
+
+
+# --------------------------------------------------------------------------- #
+# Dòng thời gian (học viên)
+# --------------------------------------------------------------------------- #
+class TimelineItemOut(BaseModel):
+    kind: Literal["quiz", "due"]  # quiz: giờ đóng bài kiểm tra; due: hạn hoàn thành khóa
+    at: datetime
+    course_id: int
+    course_title: str
+    is_mandatory: bool
+    lesson_id: int | None  # quiz
+    title: str  # quiz: tên bài kiểm tra
+    is_graded: bool | None  # quiz
+
+
+class TimelineOut(BaseModel):
+    items: list[TimelineItemOut]

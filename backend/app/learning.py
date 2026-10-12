@@ -123,6 +123,17 @@ def mark_completed(progress: LessonProgress) -> None:
     progress.completed_at = datetime.now(timezone.utc)
 
 
+def record_quiz_attempt(db: Session, user_id: int, lesson: Lesson, passed: bool,
+                        time_spent_seconds: int) -> LessonProgress:
+    """Một lượt làm bài kiểm tra vừa kết thúc: cộng thời gian làm bài; đạt thì hoàn thành bài
+    (quy tắc QuizPass). Trượt không làm mất trạng thái hoàn thành của lượt đạt trước. Chưa commit."""
+    progress = _get_or_create(db, user_id, lesson.id)
+    progress.time_spent_seconds += max(0, time_spent_seconds)
+    if passed:
+        mark_completed(progress)
+    return progress
+
+
 def record_progress(db: Session, user_id: int, lesson: Lesson, update: ProgressUpdate) -> LessonProgress:
     """Lưu số liệu mới rồi áp quy tắc hoàn thành. Chưa commit."""
     progress = _get_or_create(db, user_id, lesson.id)
