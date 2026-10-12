@@ -1,6 +1,7 @@
 // Dữ liệu mẫu, khớp cấu trúc và nội dung với backend/db/02_seed.sql.
-// Backend hiện có /auth, /admin/users, /me/courses (Khóa học của tôi, khối "gần đây" ở Dashboard)
-// và /me/courses/:id (Trang khóa học); các màn còn lại (giao diện học, giảng viên…) tạm dùng dữ liệu này.
+// Backend hiện có /auth, /admin/users, /me/courses (Khóa học của tôi, khối "gần đây" ở Dashboard),
+// /me/courses/:id (Trang khóa học) và /me/courses/:id/lessons/:lessonId (Giao diện học);
+// các màn còn lại (giảng viên, làm bài kiểm tra…) tạm dùng dữ liệu này.
 // Khi có API, thay từng hàm get* bằng lời gọi api.get(...) tương ứng.
 //
 // Quy ước để lớp API chuyển đổi giữa DB và giao diện:
@@ -73,8 +74,6 @@ export function registerLocalFile(file) {
     return id
 }
 
-export const fileInfo = (id) => FILES.get(id)
-
 /* --------------------------------------------------------------------------
  * Khóa học (giảng viên)
  * ------------------------------------------------------------------------ */
@@ -98,7 +97,7 @@ export const getTimeline = () => [
 ]
 
 /* --------------------------------------------------------------------------
- * Nội dung khóa ATLD-01 từ góc nhìn học viên (Nguyễn Minh Anh)
+ * Nội dung mẫu khóa ATLD-01 (bài đọc, câu hỏi quiz) cho các màn giảng viên
  * ------------------------------------------------------------------------ */
 // t: question_type; c: chỉ số đáp án đúng (multiple_choice: mảng); accept: đáp án chấp nhận của short_text; p: điểm
 export const QUIZ_QUESTIONS = [
@@ -109,14 +108,6 @@ export const QUIZ_QUESTIONS = [
     { t: 'multiple_choice', p: 2, q: 'Trước ca làm, bạn phát hiện kính bảo hộ bị nứt. Bạn cần làm gì?', o: ['Ngừng sử dụng kính bị nứt', 'Báo qua phiếu yêu cầu', 'Dán băng keo rồi dùng tiếp', 'Nhận kính mới trước khi vào ca'], c: [0, 1, 3], e: 'Kính nứt không còn bảo vệ đúng tiêu chuẩn: ngừng dùng, báo qua phiếu yêu cầu và nhận kính mới trước khi vào ca.' },
     { t: 'single_choice', p: 1, q: 'Ai chịu trách nhiệm kiểm tra PPE của bản thân trước mỗi ca?', o: ['Trưởng ca', 'Phòng HSE', 'Chính người lao động', 'Bảo vệ'], c: 2, e: 'Mỗi người tự kiểm tra PPE của mình trước ca; trưởng ca và HSE giám sát, hỗ trợ.' },
     { t: 'short_text', p: 1, q: 'Thiết bị bảo hộ bị hỏng được báo cáo qua kênh nào?', accept: ['Phiếu yêu cầu', 'Phiếu yêu cầu thiết bị'], e: 'Mọi thiết bị hỏng được báo qua phiếu yêu cầu để HSE ghi nhận và cấp mới.' },
-]
-
-const FINAL_QUESTIONS = [
-    { t: 'single_choice', p: 1, q: 'Khi phát hiện cháy trong xưởng, việc đầu tiên cần làm là gì?', o: ['Hô hoán và nhấn chuông báo cháy gần nhất', 'Thu dọn đồ cá nhân', 'Tiếp tục công việc đang dở', 'Tự đi tìm nguồn cháy'], c: 0, e: 'Báo động sớm giúp mọi người sơ tán kịp thời và đội ứng phó có mặt nhanh nhất.' },
-    { t: 'true_false', p: 1, q: 'Được phép tháo tấm che bảo vệ của máy để thao tác nhanh hơn nếu làm cẩn thận.', o: ['Đúng', 'Sai'], c: 1, e: 'Tấm che bảo vệ là bắt buộc; tháo ra chỉ khi bảo trì và máy đã được khóa, treo thẻ.' },
-    { t: 'multiple_choice', p: 2, q: 'Trước khi bảo trì máy, cần thực hiện những bước nào?', o: ['Ngắt nguồn năng lượng của máy', 'Khóa và treo thẻ (LOTO)', 'Kiểm tra máy đã dừng hẳn', 'Để máy chạy để dễ quan sát'], c: [0, 1, 2], e: 'Quy trình LOTO: ngắt năng lượng, khóa và treo thẻ, xác nhận máy đã dừng hẳn.' },
-    { t: 'short_text', p: 1, q: 'Khi có lệnh sơ tán, người lao động khu B tập trung ở đâu?', accept: ['Sân trước cổng chính', 'Sân cổng chính'], e: 'Theo quy trình xử lý khẩn cấp, điểm tập kết của khu B là sân trước cổng chính.' },
-    { t: 'single_choice', p: 1, q: 'Biển báo hình tam giác, viền đỏ, nền vàng có ý nghĩa gì?', o: ['Cảnh báo nguy hiểm', 'Cấm', 'Bắt buộc', 'Chỉ dẫn'], c: 0, e: 'Biển tam giác viền đỏ nền vàng là biển cảnh báo nguy hiểm.' },
 ]
 
 const PPE_PAGE = `# Bảng tra PPE theo khu vực
@@ -192,52 +183,6 @@ Khóa học giúp bạn làm việc an toàn tại khu vực sản xuất. Sau k
 3. Đạt **từ 80%** ở bài kiểm tra cuối khóa trước hạn **31/10/2026**.
 
 Sổ tay an toàn của nhà máy ở mục tài liệu đính kèm.`
-
-const ATLD = {
-    id: 1,
-    title: 'An toàn lao động tại khu vực sản xuất',
-    department: 'HSE',
-    is_mandatory: true,
-    is_sequential: true,
-    due: '31/10/2026',
-    finalPass: 80,
-    sections: [
-        {
-            title: 'Giới thiệu khóa học', description: 'Mục tiêu khóa học, thông báo từ Phòng HSE và cách hoàn thành khóa.',
-            items: [{ t: 'page', name: 'Giới thiệu khóa học', minutes: 5, done: true, content: INTRO_PAGE, files: [8] }],
-        },
-        {
-            title: 'Quy định chung & nhận diện mối nguy', description: 'Nội quy an toàn của xưởng, các nhóm mối nguy thường gặp và biển báo.',
-            items: [
-                { t: 'video', name: 'Giới thiệu & quy định chung', minutes: 8, done: true, description: 'Nội quy ra vào xưởng và trách nhiệm của người lao động.', files: [] },
-                { t: 'video', name: 'Nhận diện mối nguy', minutes: 15, done: true, description: 'Các nhóm mối nguy cơ học, điện, hóa chất, tiếng ồn.', files: [] },
-                { t: 'pdf', name: 'Biển báo an toàn', minutes: 10, done: true, pages: 5, url: '/samples/bien-bao-an-toan.pdf', description: 'Tài liệu PDF các nhóm biển báo cấm, cảnh báo, bắt buộc, chỉ dẫn.', files: [] },
-            ],
-        },
-        {
-            title: 'Thiết bị bảo hộ cá nhân', description: 'Chọn, kiểm tra và sử dụng đúng PPE cho từng khu vực trong xưởng.',
-            items: [
-                { t: 'video', name: 'Sử dụng thiết bị bảo hộ cá nhân', minutes: 12, done: false, position: 252, description: 'Video hướng dẫn cách chọn, kiểm tra và đeo đúng thiết bị bảo hộ cá nhân trước khi vào ca làm việc.', files: [] },
-                { t: 'page', name: 'Bảng tra PPE theo khu vực', minutes: 5, done: true, content: PPE_PAGE, files: [7] },
-                { t: 'quiz', name: 'Kiểm tra nhanh: Thiết bị bảo hộ', minutes: 15, done: false, quiz: { minutes: 15, attempts: 2, pass: 80, is_graded: false, review_policy: 'after_submit', questions: QUIZ_QUESTIONS } },
-            ],
-        },
-        {
-            title: 'Vận hành máy & tình huống khẩn cấp', description: 'Quy tắc an toàn khi vận hành máy và các bước xử lý khi có sự cố.',
-            items: [
-                { t: 'video', name: 'An toàn khi vận hành máy', minutes: 20, done: false, description: 'Tấm che bảo vệ, nút dừng khẩn cấp, khóa và treo thẻ (LOTO).', files: [] },
-                { t: 'page', name: 'Xử lý tình huống khẩn cấp', minutes: 10, done: false, content: EMERGENCY_PAGE, files: [] },
-                { t: 'video', name: 'Diễn tập sơ tán', minutes: 10, done: false, description: 'Ghi hình buổi diễn tập sơ tán tại khu B.', files: [] },
-            ],
-        },
-        {
-            title: 'Đánh giá cuối khóa', description: 'Bài kiểm tra tính điểm, điều kiện hoàn thành khóa học.',
-            items: [{ t: 'quiz', name: 'Bài kiểm tra cuối khóa', minutes: 30, done: false, quiz: { minutes: 30, attempts: 1, pass: 80, is_graded: true, review_policy: 'after_close', questions: FINAL_QUESTIONS } }],
-        },
-    ],
-}
-
-export const getLearnCourse = () => clone(ATLD)
 
 /* --------------------------------------------------------------------------
  * Giảng viên: thông số khóa học
