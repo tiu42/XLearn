@@ -6,8 +6,9 @@ import { getCourse, getQuizDraft } from '../../data/mock'
 import { LETTERS } from '../learner/quiz'
 import './teacher.css'
 
-const TL = { single: 'MỘT ĐÁP ÁN', multi: 'NHIỀU ĐÁP ÁN', text: 'TỰ LUẬN NGẮN' }
-const TC = { single: 'tag-page', multi: 'tag-video', text: 'tag-text' }
+const TL = { single_choice: 'MỘT ĐÁP ÁN', multiple_choice: 'NHIỀU ĐÁP ÁN', true_false: 'ĐÚNG / SAI', short_text: 'TỰ LUẬN NGẮN' }
+const TC = { single_choice: 'tag-page', multiple_choice: 'tag-video', true_false: 'tag-exam', short_text: 'tag-text' }
+const REVIEW = [['after_submit', 'Ngay sau khi nộp bài'], ['after_close', 'Sau khi bài đóng'], ['never', 'Không hiển thị']]
 const swap = (a, i, j) => { const b = [...a];[b[i], b[j]] = [b[j], b[i]]; return b }
 
 export default function QuizEditor() {
@@ -15,7 +16,7 @@ export default function QuizEditor() {
     const course = useMemo(() => getCourse(courseId), [courseId])
     const draft = useMemo(() => getQuizDraft(), [])
     const [title, setTitle] = useState(draft.title)
-    const [kind, setKind] = useState(draft.kind)
+    const [graded, setGraded] = useState(draft.is_graded)
     const [set, setSet] = useState(draft.settings)
     const [qs, setQs] = useState(draft.questions)
     const [openId, setOpenId] = useState(2)
@@ -27,20 +28,26 @@ export default function QuizEditor() {
     const contentUrl = `/teach/courses/${courseId}/content`
     const upd = (id, fn) => setQs((list) => list.map((q) => (q.id === id ? fn({ ...q }) : q)))
     const setS = (k, num) => (e) => { const v = num ? Number(e.target.value) : e.target.value; setSet((s) => ({ ...s, [k]: v })) }
-    const total = qs.reduce((s, q) => s + (Number(q.pts) || 0), 0)
+    const total = qs.reduce((sum, q) => sum + (Number(q.pts) || 0), 0)
     const cnt = (t) => qs.filter((q) => q.t === t).length
-    const exam = kind === 'exam'
 
     const add = (t) => {
         const id = ++nid.current
-        setQs((list) => [...list, t === 'text'
+        setQs((list) => [...list, t === 'short_text'
             ? { id, t, pts: 1, q: '', accept: [''], e: '' }
-            : { id, t, pts: 1, q: '', o: ['', '', '', ''], c: [], e: '' }])
+            : t === 'true_false'
+                ? { id, t, pts: 1, q: '', o: ['Đúng', 'Sai'], c: [], e: '' }
+                : { id, t, pts: 1, q: '', o: ['', '', '', ''], c: [], e: '' }])
         setOpenId(id)
     }
 
     const save = () => {
-        const bad = qs.filter((q) => q.t !== 'text' && !q.c.length).length
+        // ck_quizzes_window: giờ đóng phải sau giờ mở
+        if (set.opens_at && set.closes_at && set.closes_at <= set.opens_at) {
+            flash('Chưa lưu: giờ đóng phải sau giờ mở.')
+            return
+        }
+        const bad = qs.filter((q) => q.t !== 'short_text' && !q.c.length).length
         flash(bad ? `Đã lưu. Còn ${bad} câu chưa chọn đáp án đúng.` : 'Đã lưu bài kiểm tra.')
     }
 
@@ -82,7 +89,7 @@ export default function QuizEditor() {
                     <main style={{ flex: '999 1 560px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <div className="row-between" style={{ gap: 10 }}>
                             <h2 style={{ fontSize: 18, fontWeight: 700 }}>Câu hỏi · {qs.length} câu · {total} điểm</h2>
-                            <span className="small text-2">{cnt('single')} một đáp án · {cnt('multi')} nhiều đáp án · {cnt('text')} tự luận ngắn</span>
+                            <span className="small text-2">{cnt('single_choice')} một đáp án · {cnt('multiple_choice')} nhiều đáp án · {cnt('true_false')} đúng/sai · {cnt('short_text')} tự luận ngắn</span>
                         </div>
 
                         {qs.map((q, i) => (
@@ -95,9 +102,10 @@ export default function QuizEditor() {
 
                         <div className="add-q">
                             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary-dark)', marginRight: 6 }}>+ Thêm câu hỏi:</span>
-                            <button type="button" className="btn btn--soft" style={{ minHeight: 38 }} onClick={() => add('single')}>Một đáp án</button>
-                            <button type="button" className="btn btn--soft" style={{ minHeight: 38 }} onClick={() => add('multi')}>Nhiều đáp án</button>
-                            <button type="button" className="btn btn--soft" style={{ minHeight: 38 }} onClick={() => add('text')}>Tự luận ngắn</button>
+                            <button type="button" className="btn btn--soft" style={{ minHeight: 38 }} onClick={() => add('single_choice')}>Một đáp án</button>
+                            <button type="button" className="btn btn--soft" style={{ minHeight: 38 }} onClick={() => add('multiple_choice')}>Nhiều đáp án</button>
+                            <button type="button" className="btn btn--soft" style={{ minHeight: 38 }} onClick={() => add('true_false')}>Đúng / Sai</button>
+                            <button type="button" className="btn btn--soft" style={{ minHeight: 38 }} onClick={() => add('short_text')}>Tự luận ngắn</button>
                         </div>
                     </main>
 
@@ -106,17 +114,17 @@ export default function QuizEditor() {
                         <div className="stack">
                             <span id="kl" style={{ fontSize: 14, fontWeight: 600 }}>Loại</span>
                             <div role="radiogroup" aria-labelledby="kl" className="seg" style={{ borderRadius: 6, background: '#F1F3F5' }}>
-                                <button type="button" role="radio" aria-checked={!exam} onClick={() => setKind('quiz')}>Quiz luyện tập</button>
-                                <button type="button" role="radio" aria-checked={exam}
-                                    onClick={() => { setKind('exam'); setSet((s) => ({ ...s, tries: 1, reveal: 'Sau khi bài đóng' })) }}>Tính điểm</button>
+                                <button type="button" role="radio" aria-checked={!graded} onClick={() => setGraded(false)}>Quiz luyện tập</button>
+                                <button type="button" role="radio" aria-checked={graded}
+                                    onClick={() => { setGraded(true); setSet((x) => ({ ...x, attempts: 1, review_policy: 'after_close' })) }}>Tính điểm</button>
                             </div>
                             <span className="small text-2" style={{ lineHeight: 1.5 }}>
-                                {exam ? 'Tính vào kết quả khóa học và là điều kiện hoàn thành khóa.' : 'Giúp học viên tự ôn sau bài học, không tính vào kết quả khóa học.'}
+                                {graded ? 'Tính vào kết quả khóa học và là điều kiện hoàn thành khóa.' : 'Giúp học viên tự ôn sau bài học, không tính vào kết quả khóa học.'}
                             </span>
                         </div>
                         <div className="field-row" style={{ gap: 12 }}>
-                            <div className="field field--narrow"><label htmlFor="s-t">Thời gian (phút)</label><input id="s-t" type="number" min="1" className="input" value={set.time} onChange={setS('time', true)} /></div>
-                            <div className="field field--narrow"><label htmlFor="s-a">Số lượt làm</label><input id="s-a" type="number" min="0" className="input" value={set.tries} onChange={setS('tries', true)} /></div>
+                            <div className="field field--narrow"><label htmlFor="s-t">Thời gian (phút)</label><input id="s-t" type="number" min="1" className="input" value={set.minutes} onChange={setS('minutes', true)} /></div>
+                            <div className="field field--narrow"><label htmlFor="s-a">Số lượt làm</label><input id="s-a" type="number" min="0" className="input" value={set.attempts} onChange={setS('attempts', true)} /></div>
                         </div>
                         <span className="text-2" style={{ fontSize: 12, marginTop: -8 }}>Số lượt làm = 0 nghĩa là không giới hạn.</span>
                         <div className="field">
@@ -125,20 +133,20 @@ export default function QuizEditor() {
                         </div>
                         <div className="field-row" style={{ gap: 12 }}>
                             <div className="field" style={{ flex: '1 1 140px' }}><label htmlFor="s-o">Mở lúc</label>
-                                <input id="s-o" type="datetime-local" className="input" style={{ fontSize: 14, padding: '0 8px' }} value={set.open} onChange={setS('open')} /></div>
+                                <input id="s-o" type="datetime-local" className="input" style={{ fontSize: 14, padding: '0 8px' }} value={set.opens_at} onChange={setS('opens_at')} /></div>
                             <div className="field" style={{ flex: '1 1 140px' }}><label htmlFor="s-c">Đóng lúc</label>
-                                <input id="s-c" type="datetime-local" className="input" style={{ fontSize: 14, padding: '0 8px' }} value={set.close} onChange={setS('close')} /></div>
+                                <input id="s-c" type="datetime-local" className="input" style={{ fontSize: 14, padding: '0 8px' }} value={set.closes_at} onChange={setS('closes_at')} /></div>
                         </div>
                         <div className="field"><label htmlFor="s-r">Cho học viên xem đáp án</label>
-                            <select id="s-r" className="select" value={set.reveal} onChange={setS('reveal')}>
-                                <option>Ngay sau khi nộp bài</option><option>Sau khi bài đóng</option><option>Không hiển thị</option>
+                            <select id="s-r" className="select" value={set.review_policy} onChange={setS('review_policy')}>
+                                {REVIEW.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
                             </select></div>
                         <label className="check" style={{ gap: 10 }}>
-                            <input type="checkbox" checked={set.shuffle} onChange={() => setSet((s) => ({ ...s, shuffle: !s.shuffle }))} />
-                            Trộn thứ tự câu hỏi và đáp án
+                            <input type="checkbox" checked={set.shuffle_questions} onChange={() => setSet((x) => ({ ...x, shuffle_questions: !x.shuffle_questions }))} />
+                            Trộn thứ tự câu hỏi
                         </label>
                         <div style={{ padding: '12px 14px', borderRadius: 6, background: 'var(--bg-subtle)', fontSize: 14, lineHeight: 1.6 }} className="text-2">
-                            {exam ? 'Bài kiểm tra tính điểm' : 'Quiz luyện tập'} · {qs.length} câu, {total} điểm · {set.time} phút · {Number(set.tries) === 0 ? 'không giới hạn lượt' : `${set.tries} lượt`} · đạt từ {set.pass}%.
+                            {graded ? 'Bài kiểm tra tính điểm' : 'Quiz luyện tập'} · {qs.length} câu, {total} điểm · {set.minutes} phút · {Number(set.attempts) === 0 ? 'không giới hạn lượt' : `${set.attempts} lượt`} · đạt từ {set.pass}%.
                         </div>
                     </aside>
                 </div>
@@ -161,18 +169,24 @@ export default function QuizEditor() {
 }
 
 function QuestionCard({ q, i, n, open, onToggle, onMove, onDelete, upd }) {
-    const multi = q.t === 'multi'
-    const invalid = q.t !== 'text' && !q.c.length
+    const multi = q.t === 'multiple_choice'
+    const tf = q.t === 'true_false'
+    const invalid = q.t !== 'short_text' && !q.c.length
     const field = (k, num) => (e) => { const v = num ? Number(e.target.value) : e.target.value; upd((y) => ({ ...y, [k]: v })) }
 
     const setType = (e) => {
         const nt = e.target.value
-        upd((y) => (nt === 'text'
-            ? { ...y, t: nt, accept: y.accept ?? [''] }
-            : { ...y, t: nt, o: y.o ?? ['', '', '', ''], c: nt === 'single' ? (y.c ?? []).slice(0, 1) : (y.c ?? []) }))
+        upd((y) => {
+            if (nt === 'short_text') return { ...y, t: nt, accept: y.accept ?? [''] }
+            // Đúng/Sai: 2 lựa chọn cố định, giữ đáp án đúng nếu còn hợp lệ
+            if (nt === 'true_false') return { ...y, t: nt, o: ['Đúng', 'Sai'], c: (y.c ?? []).filter((k) => k < 2).slice(0, 1) }
+            const o = y.t === 'true_false' || !y.o ? ['', '', '', ''] : y.o
+            const c = y.t === 'true_false' ? [] : y.c ?? []
+            return { ...y, t: nt, o, c: nt === 'single_choice' ? c.slice(0, 1) : c }
+        })
     }
     const toggleCorrect = (k) => upd((y) => {
-        if (y.t === 'single') return { ...y, c: [k] }
+        if (y.t !== 'multiple_choice') return { ...y, c: [k] }
         const c = y.c.includes(k) ? y.c.filter((x) => x !== k) : [...y.c, k].sort()
         return { ...y, c }
     })
@@ -203,12 +217,14 @@ function QuestionCard({ q, i, n, open, onToggle, onMove, onDelete, upd }) {
                         <div className="field" style={{ flex: '1 1 220px' }}>
                             <label htmlFor={`qt${q.id}`}>Dạng câu hỏi</label>
                             <select id={`qt${q.id}`} className="select" value={q.t} onChange={setType}>
-                                <option value="single">Trắc nghiệm một đáp án</option><option value="multi">Trắc nghiệm nhiều đáp án</option><option value="text">Tự luận ngắn</option>
+                                <option value="single_choice">Trắc nghiệm một đáp án</option><option value="multiple_choice">Trắc nghiệm nhiều đáp án</option>
+                                <option value="true_false">Đúng / Sai</option><option value="short_text">Tự luận ngắn</option>
                             </select>
                         </div>
                         <div className="field" style={{ flex: '0 1 120px' }}>
                             <label htmlFor={`qp${q.id}`}>Điểm</label>
-                            <input id={`qp${q.id}`} type="number" min="0" step="0.5" className="input" value={q.pts} onChange={field('pts', true)} />
+                            <input id={`qp${q.id}`} type="number" min="0" step="1" className="input" value={q.pts}
+                                onChange={(e) => { const v = Math.max(0, Math.round(Number(e.target.value) || 0)); upd((y) => ({ ...y, pts: v })) }} />
                         </div>
                     </div>
                     <div className="field">
@@ -216,9 +232,9 @@ function QuestionCard({ q, i, n, open, onToggle, onMove, onDelete, upd }) {
                         <textarea id={`qx${q.id}`} rows={2} className="textarea" value={q.q} onChange={field('q')} />
                     </div>
 
-                    {q.t !== 'text' ? (
+                    {q.t !== 'short_text' ? (
                         <fieldset>
-                            <legend>Đáp án <span style={{ fontWeight: 400 }} className="text-2">· {multi ? 'đánh dấu tất cả đáp án đúng' : 'chọn một đáp án đúng'}</span></legend>
+                            <legend>Đáp án <span style={{ fontWeight: 400 }} className="text-2">· {multi ? 'đánh dấu tất cả đáp án đúng' : tf ? 'chọn Đúng hoặc Sai là đáp án đúng' : 'chọn một đáp án đúng'}</span></legend>
                             {q.o.map((text, k) => {
                                 const correct = q.c.includes(k)
                                 return (
@@ -228,13 +244,13 @@ function QuestionCard({ q, i, n, open, onToggle, onMove, onDelete, upd }) {
                                         </label>
                                         <span className="qe-letter">{LETTERS[k]}</span>
                                         <label htmlFor={`o${q.id}_${k}`} className="sr-only">Nội dung đáp án {LETTERS[k]}</label>
-                                        <input id={`o${q.id}_${k}`} className="input" style={{ flex: 1, minWidth: 0, minHeight: 40 }} placeholder="Nội dung đáp án" value={text}
+                                        <input id={`o${q.id}_${k}`} className="input" style={{ flex: 1, minWidth: 0, minHeight: 40 }} placeholder="Nội dung đáp án" value={text} readOnly={tf}
                                             onChange={(e) => { const v = e.target.value; upd((y) => ({ ...y, o: y.o.map((x, j) => (j === k ? v : x)) })) }} />
-                                        <button type="button" className="x-btn" disabled={q.o.length <= 2} onClick={() => delOpt(k)} aria-label={`Xóa đáp án ${LETTERS[k]}`}>×</button>
+                                        {!tf && <button type="button" className="x-btn" disabled={q.o.length <= 2} onClick={() => delOpt(k)} aria-label={`Xóa đáp án ${LETTERS[k]}`}>×</button>}
                                     </div>
                                 )
                             })}
-                            {q.o.length < 6 && (
+                            {!tf && q.o.length < 6 && (
                                 <button type="button" className="btn btn--dashed" style={{ alignSelf: 'flex-start', minHeight: 38 }}
                                     onClick={() => upd((y) => ({ ...y, o: [...y.o, ''] }))}>+ Thêm đáp án</button>
                             )}

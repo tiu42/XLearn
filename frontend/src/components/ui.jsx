@@ -22,11 +22,11 @@ export const Stat = ({ label, value, sub, color }) => (
     </div>
 )
 
-/** Ảnh bìa khóa học dạng sọc chéo (thay cho thumbnail thật). */
-export const CoursePattern = ({ colors, height = 100, style }) => (
-    <div aria-hidden="true" className="pattern"
-        style={{ height, backgroundColor: colors[0], '--stripe': colors[1], ...style }} />
-)
+/** Ảnh bìa khóa học (courses.thumbnail_object_id); chưa có ảnh thì vẽ nền sọc chéo theo màu của khóa. */
+export const CoursePattern = ({ colors, thumbnailUrl, height = 100, style }) => (thumbnailUrl
+    ? <img src={thumbnailUrl} alt="" loading="lazy" style={{ display: 'block', width: '100%', height, objectFit: 'cover', ...style }} />
+    : <div aria-hidden="true" className="pattern"
+        style={{ height, backgroundColor: colors[0], '--stripe': colors[1], ...style }} />)
 
 export function Modal({ title, onClose, footer, children, width = 580 }) {
     useEscape(onClose)

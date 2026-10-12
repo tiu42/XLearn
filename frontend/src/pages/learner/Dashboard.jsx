@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { QuizIcon, UploadIcon } from '../../components/Icons'
+import { CalendarIcon, QuizIcon } from '../../components/Icons'
 import { CoursePattern, SearchInput, SelectFilter } from '../../components/ui'
-import { getMyCourses, getTimeline } from '../../data/mock'
+import { courseCategory, getMyCourses, getTimeline } from '../../data/mock'
 import './learner.css'
 
 export default function Dashboard() {
-    const recent = useMemo(() => getMyCourses().slice(0, 4), [])
+    // Gần đây = lần cập nhật tiến độ mới nhất (v_enrollment_progress.last_activity_at)
+    const recent = useMemo(() => getMyCourses().sort((a, b) => b.last_access.localeCompare(a.last_access)).slice(0, 4), [])
     const timeline = useMemo(() => getTimeline(), [])
     const [range, setRange] = useState('30')
     const [sort, setSort] = useState('date')
@@ -30,10 +31,10 @@ export default function Dashboard() {
                 <div className="course-grid">
                     {recent.map((c) => (
                         <article key={c.id} className="course-card">
-                            <CoursePattern colors={c.colors} />
+                            <CoursePattern colors={c.colors} thumbnailUrl={c.thumbnail_url} />
                             <div className="course-card__body">
-                                <span className="course-card__cat">{c.cat}</span>
-                                <Link to={`/courses/${c.id}`} className="course-card__name">{c.name}</Link>
+                                <span className="course-card__cat">{courseCategory(c)}</span>
+                                <Link to={`/courses/${c.id}`} className="course-card__name">{c.title}</Link>
                             </div>
                         </article>
                     ))}
@@ -57,9 +58,9 @@ export default function Dashboard() {
                         <div key={d.date}>
                             <h3 className="tl-day">{d.date}</h3>
                             {d.items.map((t) => (
-                                <div key={t.title} className="tl-item">
+                                <div key={`${t.courseId}-${t.title}`} className="tl-item">
                                     <span className="tl-time">{t.time}</span>
-                                    <span className="tl-icon">{t.icon === 'quiz' ? <QuizIcon /> : <UploadIcon />}</span>
+                                    <span className={`tl-icon${t.kind === 'due' ? ' tl-icon--due' : ''}`}>{t.kind === 'quiz' ? <QuizIcon /> : <CalendarIcon />}</span>
                                     <div className="tl-body">
                                         <Link to={`/courses/${t.courseId}`}>{t.title}</Link>
                                         <span className="small muted">{t.meta}</span>

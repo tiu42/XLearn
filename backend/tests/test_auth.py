@@ -76,6 +76,13 @@ def test_me(api):
     t = tokens(api, "gv@x.dev")
     r = api.get("/auth/me", headers=bearer(t["access_token"]))
     assert r.status_code == 200 and r.json()["roles"] == ["instructor"]
+    assert r.json()["employee_code"] is None and r.json()["department"] is None
+
+
+def test_me_co_ma_nv_va_phong_ban(api):
+    me = api.get("/auth/me", headers=bearer(tokens(api, "hv@x.dev")["access_token"])).json()
+    assert me["employee_code"] == "NV0001"
+    assert me["department"]["code"] == "VH" and me["department"]["name"] == "Vận hành"
 
 
 @pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer abc.def.ghi"}, {"Authorization": "Basic xyz"}])

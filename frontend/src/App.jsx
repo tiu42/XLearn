@@ -1,25 +1,30 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
 import { LearnerHeader, TeacherHeader } from './components/AppHeader'
 import Login from './pages/Login'
-import CourseHome from './pages/learner/CourseHome'
-import Dashboard from './pages/learner/Dashboard'
-import Learn from './pages/learner/Learn'
-import MyCourses from './pages/learner/MyCourses'
-import CourseContent from './pages/teacher/CourseContent'
-import CourseStats from './pages/teacher/CourseStats'
-import QuizEditor from './pages/teacher/QuizEditor'
-import StudentDetail from './pages/teacher/StudentDetail'
-import Students from './pages/teacher/Students'
-import TeachCourses from './pages/teacher/TeachCourses'
+
+// Tách code theo trang: màn đăng nhập không phải tải trình hiển thị Markdown, trang giảng viên…
+const CourseHome = lazy(() => import('./pages/learner/CourseHome'))
+const Dashboard = lazy(() => import('./pages/learner/Dashboard'))
+const Learn = lazy(() => import('./pages/learner/Learn'))
+const MyCourses = lazy(() => import('./pages/learner/MyCourses'))
+const CourseContent = lazy(() => import('./pages/teacher/CourseContent'))
+const CourseStats = lazy(() => import('./pages/teacher/CourseStats'))
+const QuizEditor = lazy(() => import('./pages/teacher/QuizEditor'))
+const StudentDetail = lazy(() => import('./pages/teacher/StudentDetail'))
+const Students = lazy(() => import('./pages/teacher/Students'))
+const TeachCourses = lazy(() => import('./pages/teacher/TeachCourses'))
+
+const Loading = () => <div className="center-state">Đang tải…</div>
 
 const LearnerLayout = () => (
-    <div className="page"><LearnerHeader /><Outlet /></div>
+    <div className="page"><LearnerHeader /><Suspense fallback={<Loading />}><Outlet /></Suspense></div>
 )
 
 const TeacherLayout = () => (
-    <div className="page page--subtle"><TeacherHeader /><Outlet /></div>
+    <div className="page page--subtle"><TeacherHeader /><Suspense fallback={<Loading />}><Outlet /></Suspense></div>
 )
 
 export default function App() {
@@ -36,7 +41,7 @@ export default function App() {
                             <Route path="courses/:courseId" element={<CourseHome />} />
                         </Route>
                         {/* Giao diện học tự quản header vì chế độ làm bài toàn màn hình */}
-                        <Route path="courses/:courseId/learn" element={<Learn />} />
+                        <Route path="courses/:courseId/learn" element={<Suspense fallback={<Loading />}><Learn /></Suspense>} />
                     </Route>
 
                     <Route path="teach" element={<RequireAuth teacher />}>

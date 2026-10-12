@@ -2,7 +2,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { initials, isTeacher } from '../auth/roles'
 import { BRAND } from '../data/mock'
-import { BellIcon, ChatIcon, ChevronDown } from './Icons'
+import { ChevronDown } from './Icons'
 
 function useLogout() {
     const { logout } = useAuth()
@@ -12,6 +12,11 @@ function useLogout() {
         navigate('/login', { replace: true })
     }
 }
+
+/** users.avatar_url nếu có, ngược lại hai chữ cái cuối của họ tên. */
+const Avatar = ({ user, teacher, label }) => (user?.avatar_url
+    ? <img src={user.avatar_url} alt={label ?? ''} className={`avatar${teacher ? ' avatar--teacher' : ''}`} style={{ objectFit: 'cover' }} />
+    : <span role={label ? 'img' : undefined} aria-label={label} className={`avatar${teacher ? ' avatar--teacher' : ''}`}>{initials(user?.full_name)}</span>)
 
 const Brand = ({ to, teacher }) => (
     <Link to={to} className="brand">
@@ -33,13 +38,9 @@ export function LearnerHeader() {
             </nav>
             <div className="header-actions">
                 {isTeacher(user) && <Link to="/teach" style={{ fontSize: 14, marginRight: 8 }}>Giao diện giảng viên</Link>}
-                <button type="button" className="icon-btn" aria-label="Thông báo, 2 mục mới">
-                    <BellIcon /><span className="badge-count">2</span>
-                </button>
-                <button type="button" className="icon-btn" aria-label="Tin nhắn"><ChatIcon /></button>
                 <button type="button" aria-label={`Menu người dùng: ${user?.full_name ?? ''}`}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 44, padding: '0 6px', border: 0, background: 'transparent', color: 'var(--text)' }}>
-                    <span className="avatar">{initials(user?.full_name)}</span><ChevronDown />
+                    <Avatar user={user} /><ChevronDown />
                 </button>
                 <button type="button" className="link-btn" onClick={onLogout}>Đăng xuất</button>
             </div>
@@ -59,9 +60,7 @@ export function TeacherHeader() {
             </nav>
             <div className="header-actions" style={{ gap: 12 }}>
                 <Link to="/" style={{ fontSize: 14 }}>Giao diện học viên</Link>
-                <span role="img" aria-label={`${user?.full_name ?? ''}, Giảng viên`} className="avatar avatar--teacher">
-                    {initials(user?.full_name)}
-                </span>
+                <Avatar user={user} teacher label={`${user?.full_name ?? ''}, Giảng viên`} />
                 <button type="button" className="link-btn" onClick={onLogout}>Đăng xuất</button>
             </div>
         </header>

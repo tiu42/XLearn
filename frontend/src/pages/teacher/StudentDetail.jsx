@@ -37,7 +37,6 @@ export default function StudentDetail() {
                     <span className="text-2" style={{ fontSize: 14 }}>Hoạt động gần nhất: {student.last}</span>
                 </div>
                 <div className="row" style={{ gap: 8 }}>
-                    <button type="button" className="btn" onClick={() => flash('Đã gửi nhắc nhở về các khóa chưa hoàn thành.')}>Gửi nhắc nhở</button>
                     <button type="button" className="btn btn--primary" onClick={() => setEnrolling(true)}>+ Thêm vào khóa học</button>
                 </div>
             </section>

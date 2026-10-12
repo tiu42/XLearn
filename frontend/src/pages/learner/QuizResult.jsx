@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import { ChevronLeft } from '../../components/Icons'
-import { duration, isAnswered, isRight, LETTERS, TYPE_LABEL } from './quiz'
+import { duration, isAnswered, isMulti, isRight, isText, LETTERS, TYPE_LABEL } from './quiz'
 
 /** Kết quả lần làm gần nhất + xem lại đáp án (lọc câu sai). */
-export default function QuizResult({ title, questions, attempt, attemptNo, allowed, pass, triesLeft, onRetry, onNext, onExit }) {
+// quizzes.review_policy: chỉ 'after_submit' mới cho xem đáp án ngay sau khi nộp
+const REVIEW_NOTE = {
+    after_close: 'Đáp án và giải thích sẽ hiện sau khi bài kiểm tra đóng.',
+    never: 'Giảng viên không công bố đáp án cho bài kiểm tra này.',
+}
+
+export default function QuizResult({ title, questions, attempt, attemptNo, allowed, pass, triesLeft, reviewPolicy = 'after_submit', onRetry, onNext, onExit }) {
     const [filter, setFilter] = useState('all')
     const total = questions.length
-    const pct = Math.round((attempt.score / total) * 100)
+    const pct = attempt.pct
     const passed = attempt.ok
     const wrongIdx = questions.map((q, i) => (isRight(q, attempt.ans[i]) ? -1 : i)).filter((i) => i >= 0)
     const shown = filter === 'wrong' ? wrongIdx : questions.map((_, i) => i)
@@ -40,7 +46,7 @@ export default function QuizResult({ title, questions, attempt, attemptNo, allow
                         </div>
                     </div>
                     <div className="result-facts">
-                        <div><span className="small muted">Câu đúng</span><span style={{ fontSize: 18, fontWeight: 700 }}>{attempt.score}/{total}</span></div>
+                        <div><span className="small muted">Câu đúng</span><span style={{ fontSize: 18, fontWeight: 700 }}>{attempt.correct}/{total} · {attempt.score}/{attempt.max} điểm</span></div>
                         <div><span className="small muted">Thời gian làm</span><span style={{ fontSize: 18, fontWeight: 700 }}>{duration(attempt.used)}</span></div>
                         <div><span className="small muted">Lượt làm</span><span style={{ fontSize: 18, fontWeight: 700 }}>Lần {attemptNo}{allowed === 0 ? '' : `/${allowed}`}</span></div>
                     </div>
@@ -60,6 +66,9 @@ export default function QuizResult({ title, questions, attempt, attemptNo, allow
                     </div>
                 </section>
 
+                {reviewPolicy !== 'after_submit' ? (
+                    <p className="review-note">{REVIEW_NOTE[reviewPolicy]}</p>
+                ) : (
                 <section aria-labelledby="rv" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div className="row-between">
                         <h2 id="rv" style={{ fontSize: 19, fontWeight: 700 }}>Xem lại đáp án</h2>
@@ -73,6 +82,7 @@ export default function QuizResult({ title, questions, attempt, attemptNo, allow
                     )}
                     {shown.map((i) => <ReviewCard key={i} q={questions[i]} num={i + 1} mine={attempt.ans[i]} />)}
                 </section>
+                )}
             </main>
         </div>
     )
@@ -81,7 +91,7 @@ export default function QuizResult({ title, questions, attempt, attemptNo, allow
 function ReviewCard({ q, num, mine }) {
     const ok = isRight(q, mine)
     const has = isAnswered(q, mine)
-    const multi = q.t === 'multi'
+    const multi = isMulti(q)
     return (
         <article className="review-card">
             <div className="row-between">
@@ -89,7 +99,7 @@ function ReviewCard({ q, num, mine }) {
                 <span className={`pill ${ok ? 'pill--success' : 'pill--red'}`} style={{ padding: '4px 10px' }}>{ok ? 'Đúng' : !has ? 'Bỏ trống' : 'Sai'}</span>
             </div>
             <h3 style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.5 }}>{q.q}</h3>
-            {q.t === 'text' ? (
+            {isText(q) ? (
                 <div className="stack" style={{ gap: 8 }}>
                     <div className="answer-box" style={ok
                         ? { border: '2px solid var(--success)', background: 'var(--success-bg)', color: 'var(--success-pill)' }

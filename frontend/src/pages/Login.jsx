@@ -3,7 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { errorMessage } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { isTeacher } from '../auth/roles'
-import { EyeIcon, SsoIcon } from '../components/Icons'
+import { EyeIcon } from '../components/Icons'
 import { BRAND } from '../data/mock'
 import './Login.css'
 
@@ -97,13 +97,6 @@ export default function Login() {
                             <p className="login__sub">Dùng tài khoản email công ty của bạn.</p>
 
                             {formErr && <div role="alert" className="status-msg status-msg--error" style={{ marginBottom: 18 }}>{formErr}</div>}
-
-                            <button type="button" className="btn btn--block login__sso"
-                                onClick={() => setFormErr('Đăng nhập SSO chưa được cấu hình. Vui lòng dùng email và mật khẩu.')}>
-                                <SsoIcon />Đăng nhập bằng tài khoản công ty (SSO)
-                            </button>
-
-                            <div aria-hidden="true" className="login__divider"><span />hoặc<span /></div>
 
                             {emailField('l-e')}
 

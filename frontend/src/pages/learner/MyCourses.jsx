@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CoursePattern, ProgressBar, SearchInput, SelectFilter } from '../../components/ui'
-import { getMyCourses } from '../../data/mock'
+import { courseCategory, fmtDate, getMyCourses } from '../../data/mock'
 import './learner.css'
 
-const FILTERS = [['all', 'Tất cả (trừ đã ẩn)'], ['progress', 'Đang học'], ['future', 'Sắp diễn ra'], ['past', 'Đã kết thúc'], ['starred', 'Đánh dấu sao']]
+// Lọc theo enrollments.status (đã loại 'removed')
+const FILTERS = [['all', 'Tất cả'], ['active', 'Đang học'], ['completed', 'Đã hoàn thành']]
 
 export default function MyCourses() {
     const data = useMemo(() => getMyCourses(), [])
@@ -13,10 +14,10 @@ export default function MyCourses() {
     const [sort, setSort] = useState('name')
     const [view, setView] = useState('cards')
 
-    let shown = data.filter((d) => (f === 'all' || (f === 'starred' ? d.star : d.st === f))
-        && (!q || d.name.toLowerCase().includes(q.toLowerCase())))
-    if (sort === 'name') shown = [...shown].sort((a, b) => a.name.localeCompare(b.name, 'vi'))
-    const pctLabel = (c) => (c.st === 'future' ? `Bắt đầu ${c.start}` : `${c.pct}% hoàn thành`)
+    const shown = data
+        .filter((d) => (f === 'all' || d.enrollment_status === f) && (!q || d.title.toLowerCase().includes(q.toLowerCase())))
+        .sort((a, b) => (sort === 'name' ? a.title.localeCompare(b.title, 'vi') : b.last_access.localeCompare(a.last_access)))
+    const pctLabel = (c) => (c.enrollment_status === 'completed' ? 'Đã hoàn thành' : `${c.progress}% · hạn ${fmtDate(c.due)}`)
 
     return (
         <main className="container container--1280" style={{ gap: 20 }}>
@@ -41,16 +42,12 @@ export default function MyCourses() {
                     <div className="course-grid course-grid--lg">
                         {shown.map((c) => (
                             <article key={c.id} className="course-card">
-                                <CoursePattern colors={c.colors} height={110} />
+                                <CoursePattern colors={c.colors} thumbnailUrl={c.thumbnail_url} height={110} />
                                 <div className="course-card__body" style={{ gap: 8 }}>
-                                    <div className="row-between" style={{ alignItems: 'flex-start', gap: 8, flexWrap: 'nowrap' }}>
-                                        <span className="course-card__cat">{c.cat}</span>
-                                        <button type="button" className="course-card__more" aria-label={`Tùy chọn khóa ${c.name}`}>⋯</button>
-                                    </div>
-                                    <Link to={`/courses/${c.id}`} className="course-card__name">{c.name}</Link>
-                                    {c.star && <span className="star-note">★ Đã đánh dấu sao</span>}
+                                    <span className="course-card__cat">{courseCategory(c)}</span>
+                                    <Link to={`/courses/${c.id}`} className="course-card__name">{c.title}</Link>
                                     <div className="course-card__foot">
-                                        <ProgressBar value={c.pct} size="sm" label={`Tiến độ ${c.name}`} />
+                                        <ProgressBar value={c.progress} done={c.enrollment_status === 'completed'} size="sm" label={`Tiến độ ${c.title}`} />
                                         <span className="small muted">{pctLabel(c)}</span>
                                     </div>
                                 </div>
@@ -63,13 +60,13 @@ export default function MyCourses() {
                     <div>
                         {shown.map((c) => (
                             <div key={c.id} className="course-list-row">
-                                <CoursePattern colors={c.colors} height={56} style={{ flex: '0 0 72px', borderRadius: 6 }} />
+                                <CoursePattern colors={c.colors} thumbnailUrl={c.thumbnail_url} height={56} style={{ flex: '0 0 72px', width: 72, borderRadius: 6 }} />
                                 <div style={{ flex: '1 1 280px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                    <span className="course-card__cat">{c.cat}</span>
-                                    <Link to={`/courses/${c.id}`} className="course-card__name">{c.name}</Link>
+                                    <span className="course-card__cat">{courseCategory(c)}</span>
+                                    <Link to={`/courses/${c.id}`} className="course-card__name">{c.title}</Link>
                                 </div>
-                                <div className="progress-row" style={{ flex: '0 1 220px', gap: 10 }}>
-                                    <ProgressBar value={c.pct} size="sm" label={`Tiến độ ${c.name}`} />
+                                <div className="progress-row" style={{ flex: '0 1 260px', gap: 10 }}>
+                                    <ProgressBar value={c.progress} done={c.enrollment_status === 'completed'} size="sm" label={`Tiến độ ${c.title}`} />
                                     <span className="small muted" style={{ whiteSpace: 'nowrap' }}>{pctLabel(c)}</span>
                                 </div>
                             </div>

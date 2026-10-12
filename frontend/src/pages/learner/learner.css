@@ -5,9 +5,7 @@
 .course-card__body { padding: 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .course-card__name { font-size: 15px; font-weight: 600; text-decoration: none; line-height: 1.4; }
 .course-card__cat { font-size: 13px; color: var(--muted); }
-.course-card__more { width: 32px; height: 32px; margin: -6px -6px 0 0; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; }
 .course-card__foot { margin-top: auto; padding-top: 6px; display: flex; flex-direction: column; gap: 6px; }
-.star-note { font-size: 12px; font-weight: 600; color: #7A5300; }
 
 .course-list-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border-row); }
 
@@ -17,6 +15,7 @@
 .tl-item:last-child { border-bottom: 0; }
 .tl-time { flex: 0 0 48px; font-size: 14px; color: var(--muted); }
 .tl-icon { flex: 0 0 36px; height: 36px; border-radius: 8px; background: var(--event); color: #fff; display: flex; align-items: center; justify-content: center; }
+.tl-icon--due { background: var(--warn); }
 .tl-body { flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; }
 .tl-body a { font-size: 15px; font-weight: 600; text-decoration: none; }
 
@@ -102,9 +101,6 @@
 .quiz-facts span:first-child { font-size: 13px; color: var(--muted); }
 .quiz-facts span:last-child { font-size: 18px; font-weight: 700; }
 .try-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; font-size: 14px; padding: 10px 12px; border-radius: 8px; background: var(--bg-subtle); }
-.forum-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; }
-.forum-list a { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border-soft); text-decoration: none; color: var(--text); }
-.forum-list a:last-child { border-bottom: 0; }
 .lesson-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
 .lesson-nav .btn { min-height: 44px; font-size: 15px; }
 .lesson-nav .btn:disabled { background: #fff; color: var(--faint); border-color: var(--input-soft); }
@@ -157,3 +153,18 @@
 .review-opt--wrong .q-letter { background: var(--danger); color: #fff; }
 .explain { display: flex; gap: 10px; padding: 14px 16px; border-radius: 10px; background: var(--bg-quiz); font-size: 15px; line-height: 1.6; }
 .answer-box { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 10px; }
+
+/* ---------- PDF, bài đọc, đính kèm ---------- */
+.pdf-viewer { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.pdf-viewer__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; }
+.pdf-viewer__page { aspect-ratio: 3 / 4; max-height: 70vh; margin: 20px auto; width: min(560px, calc(100% - 40px)); background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.12); display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; color: var(--muted); text-align: center; padding: 20px; }
+.reading-bar { position: sticky; top: 0; z-index: 2; height: 4px; background: var(--track); margin: -8px 0 0; border-radius: 2px; overflow: hidden; }
+.reading-bar div { height: 100%; background: var(--primary); transition: width .15s; }
+.reading-end { margin-top: 28px; padding-top: 14px; border-top: 1px dashed var(--border); text-align: center; }
+.attachments { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.attachments ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.attachments li { display: flex; align-items: center; gap: 10px; color: var(--text-2); }
+.attachments a { font-weight: 600; text-decoration: none; }
+.locked-topic { margin: 40px auto; max-width: 460px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.locked-topic__icon { width: 56px; height: 56px; border-radius: 50%; background: var(--track); color: var(--muted); display: flex; align-items: center; justify-content: center; }
+.review-note { padding: 18px 20px; border-radius: 12px; background: #fff; border: 1px solid #E2E6EA; font-size: 15px; color: var(--text-2); text-align: center; }

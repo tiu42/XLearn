@@ -9,7 +9,7 @@ import './teacher.css'
 
 const ST_TEXT = { done: 'Đã hoàn thành', prog: 'Đang học', not: 'Chưa bắt đầu' }
 const ST_PILL = { done: 'pill--green', prog: 'pill--blue', not: 'pill--gray' }
-const TAG = { 'Video': 'tag-video', 'Bài đọc': 'tag-page', 'Kiểm tra': 'tag-quiz' }
+const TAG = { video: ['Video', 'tag-video'], pdf: ['PDF', 'tag-pdf'], page: ['Bài đọc', 'tag-page'], quiz: ['Kiểm tra', 'tag-quiz'] }
 
 export default function CourseStats() {
     const { courseId } = useParams()
@@ -52,11 +52,11 @@ export default function CourseStats() {
         setRemoving(null)
     }
 
-    function doAdd(chosen, notify) {
+    function doAdd(chosen) {
         setPeople((ps) => [...ps, ...chosen.map((c) => ({ ...c, done: 0, exam: null, enrolled: todayVN() }))])
         setPool((pl) => pl.filter((c) => !chosen.some((x) => x.id === c.id)))
         setAdding(false)
-        flash(`Đã thêm ${chosen.length} học viên vào khóa học${notify ? ' và gửi email thông báo.' : '.'}`)
+        flash(`Đã thêm ${chosen.length} học viên vào khóa học.`)
     }
 
     return (
@@ -94,7 +94,7 @@ export default function CourseStats() {
                             const v = pc(people.filter((p) => p.done > i).length)
                             return (
                                 <div key={it.n} className="by-lesson">
-                                    <span title={it.n}><span className={`type-tag ${TAG[it.t]}`}>{it.t}</span> {it.n}</span>
+                                    <span title={it.n}><span className={`type-tag ${TAG[it.t][1]}`}>{TAG[it.t][0]}</span> {it.n}</span>
                                     <ProgressBar value={v} done={v >= 80} label={`Hoàn thành ${it.n}`} />
                                     <span style={{ textAlign: 'right', fontWeight: 600 }}>{v}%</span>
                                 </div>
@@ -174,18 +174,14 @@ function AddLearners({ pool, onClose, onAdd }) {
     const [aq, setAq] = useState('')
     const [dept, setDept] = useState('all')
     const [picks, setPicks, toggle] = useSelection()
-    const [notify, setNotify] = useState(true)
     const cands = pool.filter((c) => (dept === 'all' || c.dept === dept) && (!aq || `${c.name} ${c.code}`.toLowerCase().includes(aq.toLowerCase())))
 
     return (
         <Modal title="Thêm học viên vào khóa học" width={560} onClose={onClose}
             footer={<>
-                <label className="check" style={{ marginRight: 'auto' }}>
-                    <input type="checkbox" checked={notify} onChange={() => setNotify((n) => !n)} />Gửi email thông báo
-                </label>
                 <button type="button" className="btn" onClick={onClose}>Hủy</button>
                 <button type="button" className="btn btn--primary" disabled={picks.size === 0}
-                    onClick={() => onAdd(pool.filter((c) => picks.has(c.id)), notify)}>
+                    onClick={() => onAdd(pool.filter((c) => picks.has(c.id)))}>
                     {picks.size ? `Thêm ${picks.size} học viên` : 'Thêm học viên'}
                 </button>
             </>}>

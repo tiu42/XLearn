@@ -34,4 +34,4 @@ def test_model_sinh_ddl_tren_dbms_khac(sqlite_engine):
 
     Base.metadata.create_all(sqlite_engine)
     assert set(inspect(sqlite_engine).get_table_names()) == set(Base.metadata.tables)
-    assert len(Base.metadata.tables) == 14
+    assert len(Base.metadata.tables) == 18

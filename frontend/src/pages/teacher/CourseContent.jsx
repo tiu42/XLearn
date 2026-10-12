@@ -1,19 +1,24 @@
 import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ConfirmDialog, Modal } from '../../components/ui'
 import { useToast } from '../../components/hooks'
+import MarkdownEditor from '../../components/MarkdownEditor'
+import { ConfirmDialog, Modal } from '../../components/ui'
 import { getCourse, getCourseContent } from '../../data/mock'
 import CourseHead from './CourseHead'
 import './teacher.css'
 
-const TAGS = { video: ['VIDEO', 'tag-video'], page: ['BÀI ĐỌC', 'tag-page'], quiz: ['QUIZ', 'tag-quiz'], exam: ['KIỂM TRA', 'tag-exam'] }
-const tagKey = (it) => (it.type === 'test' ? it.kind : it.type)
+const TAGS = { video: ['VIDEO', 'tag-video'], pdf: ['PDF', 'tag-pdf'], page: ['BÀI ĐỌC', 'tag-page'], quiz: ['QUIZ', 'tag-quiz'], exam: ['KIỂM TRA', 'tag-exam'] }
+const tagKey = (it) => (it.type === 'quiz' ? (it.is_graded ? 'exam' : 'quiz') : it.type)
 const swap = (a, i, j) => { const b = [...a];[b[i], b[j]] = [b[j], b[i]]; return b }
+const LESSON_TYPES = [['video', 'Video'], ['pdf', 'PDF'], ['page', 'Bài đọc']]
 
 function meta(it) {
-    if (it.type === 'video') return `Video · ${it.dur || '?'} phút`
-    if (it.type === 'page') return 'Bài đọc'
-    return `${it.kind === 'exam' ? 'Tính điểm' : 'Luyện tập'} · ${it.q} câu · ${it.time} phút · ${Number(it.tries) === 0 ? 'không giới hạn lượt' : `${it.tries} lượt`} · đạt ${it.pass}%`
+    const base = it.type === 'video' ? `Video · ${it.minutes || '?'} phút`
+        : it.type === 'pdf' ? `PDF · ${it.file ?? 'chưa có file'}`
+        : it.type === 'page' ? `Bài đọc · ${it.minutes || '?'} phút đọc`
+        : `${it.is_graded ? 'Tính điểm' : 'Luyện tập'} · ${it.q} câu · ${it.minutes} phút · ${Number(it.attempts) === 0 ? 'không giới hạn lượt' : `${it.attempts} lượt`} · đạt ${it.pass}%`
+    const files = it.files?.length ? ` · ${it.files.length} tệp đính kèm` : ''
+    return base + files + (it.status === 'draft' ? ' · Bản nháp' : '')
 }
 
 const MoveBtns = ({ i, n, onMove, what }) => (
@@ -30,7 +35,7 @@ export default function CourseContent() {
     const [topics, setTopics] = useState(getCourseContent)
     const [modal, setModal] = useState(null) // { kind: lesson|test|topic, tid, isNew }
     const [ed, setEd] = useState(null)
-    const [err, setErr] = useState(false)
+    const [errs, setErrs] = useState({})
     const [topicName, setTopicName] = useState('')
     const [confirm, setConfirm] = useState(null)
     const [toast, flash] = useToast()
@@ -38,16 +43,31 @@ export default function CourseContent() {
 
     const quizUrl = (id) => `/teach/courses/${courseId}/quizzes/${id}`
     const items = topics.flatMap((t) => t.items)
-    const nT = items.filter((it) => it.type === 'test').length
+    const nT = items.filter((it) => it.type === 'quiz').length
+    const nDraft = items.filter((it) => it.status === 'draft').length
     const mapT = (tid, fn) => setTopics((ts) => ts.map((t) => (t.id === tid ? fn({ ...t }) : t)))
-    const setE = (k, num) => (e) => { const v = num ? Number(e.target.value) : e.target.value; setEd((x) => ({ ...x, [k]: v })); if (k === 'title') setErr(false) }
+    const setE = (k, num) => (e) => {
+        const v = num ? Number(e.target.value) : e.target.value
+        setEd((x) => ({ ...x, [k]: v }))
+        setErrs((x) => ({ ...x, [k]: '' }))
+    }
     const close = () => { setModal(null); setEd(null) }
 
+    function validate() {
+        const e = {}
+        if (!String(ed.title || '').trim()) e.title = ed.type === 'quiz' ? 'Vui lòng nhập tên bài kiểm tra.' : 'Vui lòng nhập tiêu đề.'
+        // ck_lessons_media: video/pdf bắt buộc có file
+        if ((ed.type === 'video' || ed.type === 'pdf') && !ed.file) e.file = ed.type === 'video' ? 'Vui lòng chọn file video.' : 'Vui lòng chọn file PDF.'
+        if (ed.type === 'page' && !String(ed.content || '').trim()) e.content = 'Vui lòng nhập nội dung bài đọc.'
+        setErrs(e)
+        return !Object.keys(e).length
+    }
+
     function saveItem(thenEditQuestions) {
-        if (!String(ed.title || '').trim()) { setErr(true); return }
+        if (!validate()) return
         const md = modal
         mapT(md.tid, (t) => ({ ...t, items: md.isNew ? [...t.items, ed] : t.items.map((it) => (it.id === ed.id ? ed : it)) }))
-        flash(`${md.isNew ? 'Đã thêm' : 'Đã lưu'} “${ed.title}”.`)
+        flash(`${md.isNew ? 'Đã thêm' : 'Đã lưu'} “${ed.title}”${ed.status === 'draft' ? ' (bản nháp, học viên chưa thấy)' : ''}.`)
         close()
         if (thenEditQuestions) navigate(quizUrl(ed.id))
     }
@@ -68,13 +88,27 @@ export default function CourseContent() {
         flash(`Đã xóa “${c.name}”.`)
     }
 
+    const newLesson = (tid) => {
+        setErrs({})
+        setEd({ id: ++nid.current, type: 'video', title: '', minutes: 5, description: '', content: '', status: 'draft', file: null, files: [] })
+        setModal({ kind: 'lesson', tid, isNew: true })
+    }
+    const newTest = (tid) => {
+        setErrs({})
+        setEd({ id: ++nid.current, type: 'quiz', title: '', is_graded: false, q: 0, minutes: 15, attempts: 2, pass: 80, status: 'draft' })
+        setModal({ kind: 'test', tid, isNew: true })
+    }
+
     return (
         <>
             <CourseHead course={course}
                 action={<Link to={`/courses/${course.id}`} className="btn" style={{ minHeight: 40 }}>Xem như học viên</Link>} />
             <main className="container container--1000 container--teach" style={{ paddingTop: 24, gap: 16 }}>
                 <div className="row-between">
-                    <p className="text-2" style={{ fontSize: 15 }}>{topics.length} chủ đề · {items.length - nT} bài học · {nT} bài kiểm tra</p>
+                    <p className="text-2" style={{ fontSize: 15 }}>
+                        {topics.length} chủ đề · {items.length - nT} bài học · {nT} bài kiểm tra{nDraft ? ` · ${nDraft} bản nháp` : ''}
+                        {course.is_sequential && ' · Học tuần tự'}
+                    </p>
                     <button type="button" className="btn btn--outline" style={{ minHeight: 40 }}
                         onClick={() => { setModal({ kind: 'topic', isNew: true }); setTopicName('') }}>+ Thêm chủ đề</button>
                 </div>
@@ -97,7 +131,7 @@ export default function CourseContent() {
                             {t.items.map((it, j) => {
                                 const [label, cls] = TAGS[tagKey(it)]
                                 return (
-                                    <li key={it.id}>
+                                    <li key={it.id} className={it.status === 'draft' ? 'is-draft' : undefined}>
                                         <span className={`item-tag ${cls}`}>{label}</span>
                                         <div style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                                             <span style={{ fontSize: 15, fontWeight: 600 }}>{it.title}</span>
@@ -105,11 +139,11 @@ export default function CourseContent() {
                                         </div>
                                         <div className="row" style={{ gap: 6 }}>
                                             <MoveBtns i={j} n={t.items.length} what="bài" onMove={(a, b) => mapT(t.id, (x) => ({ ...x, items: swap(x.items, a, b) }))} />
-                                            {it.type === 'test' && <Link to={quizUrl(it.id)} className="btn btn--sm btn--soft">Soạn câu hỏi</Link>}
+                                            {it.type === 'quiz' && <Link to={quizUrl(it.id)} className="btn btn--sm btn--soft">Soạn câu hỏi</Link>}
                                             <button type="button" className="btn btn--sm" aria-label={`Sửa ${it.title}`}
-                                                onClick={() => { setErr(false); setEd({ ...it }); setModal({ kind: it.type === 'test' ? 'test' : 'lesson', tid: t.id }) }}>Sửa</button>
+                                                onClick={() => { setErrs({}); setEd(structuredClone(it)); setModal({ kind: it.type === 'quiz' ? 'test' : 'lesson', tid: t.id }) }}>Sửa</button>
                                             <button type="button" className="btn btn--sm btn--danger-ghost" aria-label={`Xóa ${it.title}`}
-                                                onClick={() => setConfirm({ kind: 'item', tid: t.id, id: it.id, name: it.title, isTest: it.type === 'test' })}>Xóa</button>
+                                                onClick={() => setConfirm({ kind: 'item', tid: t.id, id: it.id, name: it.title, isTest: it.type === 'quiz' })}>Xóa</button>
                                         </div>
                                     </li>
                                 )
@@ -117,54 +151,93 @@ export default function CourseContent() {
                         </ul>
                         {t.items.length === 0 && <p className="text-2" style={{ padding: '14px 16px', fontSize: 14 }}>Chủ đề chưa có bài học.</p>}
                         <div className="row" style={{ gap: 8, padding: '12px 16px' }}>
-                            <button type="button" className="btn btn--sm btn--dashed" style={{ minHeight: 36 }}
-                                onClick={() => { setErr(false); setEd({ id: ++nid.current, type: 'video', title: '', dur: 5, url: '', body: '' }); setModal({ kind: 'lesson', tid: t.id, isNew: true }) }}>+ Bài học</button>
-                            <button type="button" className="btn btn--sm btn--dashed" style={{ minHeight: 36 }}
-                                onClick={() => { setErr(false); setEd({ id: ++nid.current, type: 'test', title: '', kind: 'quiz', q: 0, time: 15, tries: 2, pass: 80 }); setModal({ kind: 'test', tid: t.id, isNew: true }) }}>+ Bài kiểm tra</button>
+                            <button type="button" className="btn btn--sm btn--dashed" style={{ minHeight: 36 }} onClick={() => newLesson(t.id)}>+ Bài học</button>
+                            <button type="button" className="btn btn--sm btn--dashed" style={{ minHeight: 36 }} onClick={() => newTest(t.id)}>+ Bài kiểm tra</button>
                         </div>
                     </section>
                 ))}
             </main>
 
             {modal?.kind === 'lesson' && (
-                <Modal title={modal.isNew ? 'Thêm bài học' : 'Sửa bài học'} width={620} onClose={close}
+                <Modal title={modal.isNew ? 'Thêm bài học' : 'Sửa bài học'} width={760} onClose={close}
                     footer={<>
+                        <label className="check" style={{ marginRight: 'auto' }}>
+                            <input type="checkbox" checked={ed.status === 'published'}
+                                onChange={(e) => setEd((x) => ({ ...x, status: e.target.checked ? 'published' : 'draft' }))} />
+                            Xuất bản (học viên nhìn thấy)
+                        </label>
                         <button type="button" className="btn" onClick={close}>Hủy</button>
                         <button type="button" className="btn btn--primary" onClick={() => saveItem(false)}>Lưu bài học</button>
                     </>}>
                     <div className="dialog__body">
                         <div className="field">
                             <label htmlFor="l-t">Tiêu đề bài học <span className="req">*</span></label>
-                            <input id="l-t" className={`input${err ? ' is-invalid' : ''}`} value={ed.title} onChange={setE('title')} autoFocus />
-                            {err && <span className="error">Vui lòng nhập tiêu đề.</span>}
+                            <input id="l-t" className={`input${errs.title ? ' is-invalid' : ''}`} value={ed.title} onChange={setE('title')} autoFocus maxLength={255} />
+                            {errs.title && <span className="error">{errs.title}</span>}
                         </div>
                         <fieldset style={{ margin: 0, padding: 0, border: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                             <legend style={{ padding: 0, marginBottom: 6, fontSize: 14, fontWeight: 600 }}>Loại bài học</legend>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                {[['video', 'Video'], ['page', 'Bài đọc']].map(([v, t]) => (
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {LESSON_TYPES.map(([v, t]) => (
                                     <label key={v} className={`radio-card${ed.type === v ? ' is-on' : ''}`}>
-                                        <input type="radio" name="lt" checked={ed.type === v} onChange={() => setEd((x) => ({ ...x, type: v }))} />{t}
+                                        <input type="radio" name="lt" checked={ed.type === v}
+                                            onChange={() => { setEd((x) => ({ ...x, type: v, file: v === x.type ? x.file : null })); setErrs({}) }} />{t}
                                     </label>
                                 ))}
                             </div>
                         </fieldset>
-                        {ed.type === 'video' && (
-                            <>
-                                <div className="field"><label htmlFor="l-f">Tải video lên</label><input id="l-f" type="file" accept="video/*" className="file-input" /></div>
-                                <div className="field-row">
-                                    <div className="field" style={{ flex: '2 1 260px' }}><label htmlFor="l-u">Hoặc đường dẫn video</label>
-                                        <input id="l-u" type="url" className="input" value={ed.url} onChange={setE('url')} placeholder="https://" /></div>
-                                    <div className="field field--narrow"><label htmlFor="l-d">Thời lượng (phút)</label>
-                                        <input id="l-d" type="number" min="1" className="input" value={ed.dur} onChange={setE('dur', true)} /></div>
-                                </div>
-                            </>
+
+                        {(ed.type === 'video' || ed.type === 'pdf') && (
+                            <div className="field">
+                                <label htmlFor="l-f">{ed.type === 'video' ? 'File video' : 'File PDF'} <span className="req">*</span></label>
+                                {ed.file && <span className="small text-2">Hiện tại: <strong>{ed.file}</strong> · chọn file khác để thay</span>}
+                                <input id="l-f" type="file" accept={ed.type === 'video' ? 'video/*' : 'application/pdf'} className={`file-input${errs.file ? ' is-invalid' : ''}`}
+                                    onChange={(e) => { const f = e.target.files?.[0]; if (f) { setEd((x) => ({ ...x, file: f.name })); setErrs((x) => ({ ...x, file: '' })) } }} />
+                                {errs.file && <span className="error">{errs.file}</span>}
+                            </div>
                         )}
-                        <div className="field">
-                            <label htmlFor="l-b">{ed.type === 'page' ? 'Nội dung bài đọc' : 'Mô tả bên dưới video'}</label>
-                            <textarea id="l-b" rows={ed.type === 'page' ? 9 : 3} className="textarea" value={ed.body} onChange={setE('body')} />
+
+                        {ed.type === 'page' ? (
+                            <div className="field">
+                                <label htmlFor="l-b">Nội dung bài đọc <span className="req">*</span></label>
+                                <MarkdownEditor id="l-b" value={ed.content} onChange={(v) => { setEd((x) => ({ ...x, content: v })); setErrs((x) => ({ ...x, content: '' })) }} />
+                                {errs.content && <span className="error">{errs.content}</span>}
+                            </div>
+                        ) : (
+                            <div className="field">
+                                <label htmlFor="l-b">{ed.type === 'video' ? 'Mô tả bên dưới video' : 'Mô tả tài liệu'}</label>
+                                <textarea id="l-b" rows={3} className="textarea" value={ed.description} onChange={setE('description')} />
+                            </div>
+                        )}
+
+                        <div className="field-row">
+                            <div className="field field--narrow" style={{ flex: '0 1 200px' }}>
+                                <label htmlFor="l-d">{ed.type === 'page' ? 'Thời gian đọc (phút)' : 'Thời lượng ước tính (phút)'}</label>
+                                <input id="l-d" type="number" min="1" className="input" value={ed.minutes} onChange={setE('minutes', true)} />
+                            </div>
                         </div>
-                        <div className="field"><label htmlFor="l-a">Tài liệu đính kèm</label>
-                            <input id="l-a" type="file" multiple className="file-input" style={{ borderWidth: 1, borderStyle: 'solid', padding: 10 }} /></div>
+
+                        <div className="field">
+                            <label htmlFor="l-a">Tài liệu đính kèm</label>
+                            {ed.files.length > 0 && (
+                                <ul className="att-edit">
+                                    {ed.files.map((name) => (
+                                        <li key={name}>
+                                            <span>{name}</span>
+                                            <button type="button" className="x-btn" style={{ width: 30, height: 30, fontSize: 15 }} aria-label={`Bỏ ${name}`}
+                                                onClick={() => setEd((x) => ({ ...x, files: x.files.filter((n) => n !== name) }))}>×</button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                            <input id="l-a" type="file" multiple className="file-input" style={{ borderWidth: 1, borderStyle: 'solid', padding: 10 }}
+                                onChange={(e) => {
+                                    const names = [...(e.target.files ?? [])].map((f) => f.name)
+                                    e.target.value = ''
+                                    setEd((x) => ({ ...x, files: [...new Set([...x.files, ...names])] }))
+                                }} />
+                            <span className="hint">Học viên tải về ở cuối bài học.</span>
+                        </div>
                     </div>
                 </Modal>
             )}
@@ -179,19 +252,25 @@ export default function CourseContent() {
                     <div className="dialog__body">
                         <div className="field">
                             <label htmlFor="t-t">Tên bài kiểm tra <span className="req">*</span></label>
-                            <input id="t-t" className={`input${err ? ' is-invalid' : ''}`} value={ed.title} onChange={setE('title')} autoFocus />
-                            {err && <span className="error">Vui lòng nhập tên bài kiểm tra.</span>}
+                            <input id="t-t" className={`input${errs.title ? ' is-invalid' : ''}`} value={ed.title} onChange={setE('title')} autoFocus />
+                            {errs.title && <span className="error">{errs.title}</span>}
                         </div>
                         <div className="field"><label htmlFor="t-k">Loại</label>
-                            <select id="t-k" className="select" value={ed.kind} onChange={setE('kind')}>
-                                <option value="quiz">Quiz luyện tập (không tính điểm)</option><option value="exam">Bài kiểm tra tính điểm</option>
+                            <select id="t-k" className="select" value={ed.is_graded ? 'graded' : 'practice'}
+                                onChange={(e) => setEd((x) => ({ ...x, is_graded: e.target.value === 'graded' }))}>
+                                <option value="practice">Quiz luyện tập (không tính điểm)</option><option value="graded">Bài kiểm tra tính điểm</option>
                             </select></div>
                         <div className="field-row">
-                            <div className="field field--narrow"><label htmlFor="t-m">Thời gian (phút)</label><input id="t-m" type="number" min="1" className="input" value={ed.time} onChange={setE('time', true)} /></div>
-                            <div className="field field--narrow"><label htmlFor="t-a">Số lượt làm</label><input id="t-a" type="number" min="0" className="input" value={ed.tries} onChange={setE('tries', true)} /></div>
+                            <div className="field field--narrow"><label htmlFor="t-m">Thời gian (phút)</label><input id="t-m" type="number" min="1" className="input" value={ed.minutes} onChange={setE('minutes', true)} /></div>
+                            <div className="field field--narrow"><label htmlFor="t-a">Số lượt làm</label><input id="t-a" type="number" min="0" className="input" value={ed.attempts} onChange={setE('attempts', true)} /></div>
                             <div className="field field--narrow"><label htmlFor="t-p">Điểm đạt (%)</label><input id="t-p" type="number" min="0" max="100" className="input" value={ed.pass} onChange={setE('pass', true)} /></div>
                         </div>
-                        <span className="small text-2">Số lượt làm = 0 nghĩa là không giới hạn. Câu hỏi được soạn ở bước tiếp theo.</span>
+                        <span className="small text-2">Số lượt làm = 0 nghĩa là không giới hạn. Câu hỏi, giờ mở/đóng và chính sách xem đáp án được cài ở bước soạn câu hỏi.</span>
+                        <label className="check">
+                            <input type="checkbox" checked={ed.status === 'published'}
+                                onChange={(e) => setEd((x) => ({ ...x, status: e.target.checked ? 'published' : 'draft' }))} />
+                            Xuất bản (học viên nhìn thấy)
+                        </label>
                     </div>
                 </Modal>
             )}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CloseIcon, TimerIcon } from '../../components/Icons'
-import { isAnswered, LETTERS, mmss, TYPE_HINT, TYPE_LABEL } from './quiz'
+import { isAnswered, isMulti, isText, LETTERS, mmss, TYPE_HINT, TYPE_LABEL } from './quiz'
 
 /** Làm bài toàn màn hình: tất cả câu hỏi trên một trang, đồng hồ đếm ngược ở thanh trên. */
 export default function QuizAttempt({ title, questions, answers, setAnswers, left, onExit, onSubmit }) {
@@ -44,14 +44,14 @@ export default function QuizAttempt({ title, questions, answers, setAnswers, lef
                     {questions.map((q, i) => {
                         const a = answers[i]
                         const has = isAnswered(q, a)
-                        const multi = q.t === 'multi'
+                        const multi = isMulti(q)
                         return (
                             <section key={q.q} id={`q${i + 1}`} aria-labelledby={`qh${i + 1}`} className="q-card">
                                 <div className="row-between">
                                     <span className="q-num">Câu {i + 1} / {total} · {TYPE_LABEL[q.t]}</span>
                                     <span className={`pill pill--tag ${has ? 'pill--blue' : 'pill--gray'}`}>{has ? 'Đã trả lời' : 'Chưa trả lời'}</span>
                                 </div>
-                                {q.t === 'text' ? (
+                                {isText(q) ? (
                                     <div className="stack" style={{ gap: 10 }}>
                                         <label id={`qh${i + 1}`} htmlFor={`qi${i + 1}`} className="q-text">{q.q}</label>
                                         <span className="q-hint">{TYPE_HINT[q.t]}</span>
