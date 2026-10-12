@@ -95,7 +95,13 @@ function ReviewCard({ q, num, mine }) {
     return (
         <article className="review-card">
             <div className="row-between">
-                <span className="small strong muted">Câu {num} · {TYPE_LABEL[q.t]}</span>
+                <span className="row" style={{ gap: 10 }}>
+                    <span className="small strong muted">Câu {num}</span>
+                    <span className={`q-type${multi ? ' q-type--multi' : ''}`}>
+                        {!isText(q) && <span aria-hidden="true" className={`q-mark q-mark--sm${multi ? ' q-mark--check' : ''}`} />}
+                        {TYPE_LABEL[q.t]}
+                    </span>
+                </span>
                 <span className={`pill ${ok ? 'pill--success' : 'pill--red'}`} style={{ padding: '4px 10px' }}>{ok ? 'Đúng' : !has ? 'Bỏ trống' : 'Sai'}</span>
             </div>
             <h3 style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.5 }}>{q.q}</h3>
