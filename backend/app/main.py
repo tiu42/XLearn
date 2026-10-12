@@ -11,7 +11,18 @@ from .config import get_settings
 from .lifecycle import lifecycle
 from .logging_utils import log_event
 from .redis_client import get_redis, ping
-from .routers import admin_users, auth, departments, learn, my_courses, quiz, teach_courses, timeline
+from .routers import (
+    admin_users,
+    auth,
+    departments,
+    learn,
+    my_courses,
+    quiz,
+    teach_content,
+    teach_courses,
+    teach_uploads,
+    timeline,
+)
 
 FRUITS_KEY = "fruits:all"
 
@@ -49,6 +60,8 @@ app.include_router(quiz.router)
 app.include_router(timeline.router)
 app.include_router(departments.router)
 app.include_router(teach_courses.router)
+app.include_router(teach_content.router)
+app.include_router(teach_uploads.router)
 
 
 @app.get("/health")

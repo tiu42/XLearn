@@ -72,7 +72,7 @@ def _out(course: Course, my_role: str | None, is_admin: bool, stats: Stats) -> T
         created_at=course.created_at, updated_at=course.updated_at,
         thumbnail_url=file_url(course.thumbnail),
         my_role=my_role,
-        can_edit=is_admin or my_role in EDITOR_ROLES,
+        can_edit=can_edit(my_role, is_admin),
         can_delete=is_admin or my_role == "owner",
         lesson_count=stats.lessons, quiz_count=stats.quizzes,
         learner_count=stats.learners, completed_count=stats.completed,
@@ -105,13 +105,28 @@ def _commit_or_conflict(db: Session) -> None:
         raise _DUPLICATE_CODE from None
 
 
-def _load(db: Session, user: User, course_id: int) -> tuple[Course, str | None, bool]:
-    """Khóa chưa xóa mềm + vai trò của user trong khóa. Quyền phụ trách đã được kiểm ở dependency."""
+def load_course(db: Session, user: User, course_id: int) -> tuple[Course, str | None, bool]:
+    """Khóa chưa xóa mềm + vai trò của user trong khóa + user có phải admin.
+
+    Quyền phụ trách đã được kiểm ở dependency require_course_instructor.
+    """
     course = db.get(Course, course_id)
     if course is None or course.deleted_at is not None:
         raise _NOT_FOUND
     link = db.get(CourseInstructor, (course_id, user.id))
     return course, link.instructor_role if link else None, ADMIN in role_codes(user)
+
+
+def can_edit(my_role: str | None, is_admin: bool) -> bool:
+    return is_admin or my_role in EDITOR_ROLES
+
+
+def load_editable_course(db: Session, user: User, course_id: int, detail: str) -> Course:
+    """Như load_course nhưng chỉ cho giảng viên chính / đồng giảng dạy / admin (trợ giảng → 403)."""
+    course, my_role, is_admin = load_course(db, user, course_id)
+    if not can_edit(my_role, is_admin):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=detail)
+    return course
 
 
 def _detail(db: Session, course: Course, my_role: str | None, is_admin: bool) -> TeachCourseOut:
@@ -179,7 +194,7 @@ def get_course(
     user: User = Depends(require_course_instructor),
     db: Session = Depends(get_db),
 ):
-    return _detail(db, *_load(db, user, course_id))
+    return _detail(db, *load_course(db, user, course_id))
 
 
 @router.patch("/{course_id}", response_model=TeachCourseOut,
@@ -191,8 +206,8 @@ def update_course(
     user: User = Depends(require_course_instructor),
     db: Session = Depends(get_db),
 ):
-    course, my_role, is_admin = _load(db, user, course_id)
-    if not (is_admin or my_role in EDITOR_ROLES):
+    course, my_role, is_admin = load_course(db, user, course_id)
+    if not can_edit(my_role, is_admin):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Trợ giảng không được sửa thông tin khóa học")
 
     fields = body.model_fields_set
@@ -229,7 +244,7 @@ def delete_course(
     db: Session = Depends(get_db),
 ):
     """Xóa mềm: khóa biến mất với cả giảng viên lẫn học viên, giữ lại bài học, ghi danh và tiến độ."""
-    course, my_role, is_admin = _load(db, user, course_id)
+    course, my_role, is_admin = load_course(db, user, course_id)
     if not (is_admin or my_role == "owner"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Chỉ giảng viên chính được xóa khóa học")
     course.deleted_at = datetime.now(timezone.utc)

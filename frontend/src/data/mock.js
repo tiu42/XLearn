@@ -2,8 +2,9 @@
 // Backend hiện có /auth, /admin/users, /me/courses (Khóa học của tôi, khối "gần đây" ở Dashboard),
 // /me/courses/:id (Trang khóa học), /me/courses/:id/lessons/:lessonId (Giao diện học),
 // …/lessons/:lessonId/quiz (Làm bài kiểm tra), /me/timeline (Dòng thời gian ở Dashboard),
-// /teach/courses (danh sách + thêm/sửa/xóa khóa học của giảng viên, phần đầu trang quản lý khóa) và /departments;
-// các màn còn lại (nội dung khóa, học viên, soạn quiz…) tạm dùng dữ liệu này.
+// /teach/courses (danh sách + thêm/sửa/xóa khóa học của giảng viên, phần đầu trang quản lý khóa), /departments,
+// /teach/courses/:id/content + /uploads (chủ đề, bài học, upload file);
+// các màn còn lại (thông số & học viên, soạn câu hỏi quiz…) tạm dùng dữ liệu này.
 // Khi có API, thay từng hàm get* bằng lời gọi api.get(...) tương ứng.
 //
 // Quy ước để lớp API chuyển đổi giữa DB và giao diện:
@@ -14,7 +15,7 @@
 //   - Thời gian quiz: giao diện dùng PHÚT, DB lưu GIÂY (time_limit_seconds). NULL = không giới hạn.
 //   - Số lượt làm: giao diện dùng 0 = không giới hạn, DB dùng NULL (CHECK max_attempts > 0).
 //   - Ngày: giao diện dùng 'YYYY-MM-DD' giờ Việt Nam, DB lưu TIMESTAMPTZ (UTC) cuối ngày 23:59:59+07.
-//   - Ảnh trong bài đọc: Markdown tham chiếu ![mô tả](file:<storage_object_id>); resolveFileUrl() đổi sang URL.
+//   - Ảnh trong bài đọc: Markdown tham chiếu ![mô tả](file:<storage_object_id>); API trả URL tạm thời của từng ảnh.
 
 export const BRAND = { name: 'Học viện XLearn', logo: 'X' }
 
@@ -37,45 +38,7 @@ export const COURSE_STATUS = {
 }
 
 /* --------------------------------------------------------------------------
- * File trong object storage (storage_objects) — chỉ dùng cho bản mock
- * ------------------------------------------------------------------------ */
-const PPE_ZONES_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" font-family="Segoe UI, sans-serif">
-<rect width="800" height="360" fill="#F4F6F8"/>
-<text x="24" y="40" font-size="22" font-weight="700" fill="#1D2125">Sơ đồ khu vực xưởng và PPE tại cửa vào</text>
-<g font-size="16" fill="#1D2125">
-<rect x="24" y="64" width="176" height="160" rx="10" fill="#DCE9F6"/><text x="40" y="96" font-weight="700">Khu dập, ép</text><text x="40" y="124">Mũ · Kính</text><text x="40" y="148">Nút tai · Giày</text>
-<rect x="216" y="64" width="176" height="160" rx="10" fill="#FFF1E0"/><text x="232" y="96" font-weight="700">Khu hàn</text><text x="232" y="124">Mặt nạ hàn</text><text x="232" y="148">Găng chịu nhiệt</text>
-<rect x="408" y="64" width="176" height="160" rx="10" fill="#FBE3E1"/><text x="424" y="96" font-weight="700">Kho hóa chất</text><text x="424" y="124">Kính · Găng</text><text x="424" y="148">Khẩu trang độc</text>
-<rect x="600" y="64" width="176" height="160" rx="10" fill="#DFF0E3"/><text x="616" y="96" font-weight="700">Khu đóng gói</text><text x="616" y="124">Giày · Găng tay</text>
-</g>
-<g fill="#0F6CBF"><circle cx="112" cy="280" r="26"/><circle cx="304" cy="280" r="26"/><circle cx="496" cy="280" r="26"/><circle cx="688" cy="280" r="26"/></g>
-<text x="24" y="340" font-size="14" fill="#3E4A55">Biển tròn nền xanh dương tại cửa: PPE bắt buộc của khu vực.</text>
-</svg>`
-
-// id = storage_objects.id trong seed
-const FILES = new Map([
-    [6, { name: 'so-do-ppe-khu-vuc.png', size: '350 KB', url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PPE_ZONES_SVG)}` }],
-    [7, { name: 'bang-tra-ppe.pdf', size: '1,2 MB', url: '#' }],
-    [8, { name: 'so-tay-an-toan.pdf', size: '4 MB', url: '#' }],
-])
-let localFileId = 1_000_000
-
-/** Đổi file:<id> trong Markdown thành URL hiển thị được. API thật sẽ trả URL tạm thời (presigned). */
-export function resolveFileUrl(src) {
-    const m = /^file:(\d+)$/.exec(src ?? '')
-    if (!m) return src
-    return FILES.get(Number(m[1]))?.url ?? ''
-}
-
-/** Bản mock của upload: giữ file trong trình duyệt (object URL), trả về id giả để chèn vào Markdown. */
-export function registerLocalFile(file) {
-    const id = ++localFileId
-    FILES.set(id, { name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} KB`, url: URL.createObjectURL(file) })
-    return id
-}
-
-/* --------------------------------------------------------------------------
- * Nội dung mẫu khóa ATLD-01 (bài đọc, câu hỏi quiz) cho các màn giảng viên
+ * Câu hỏi mẫu quiz khóa ATLD-01 cho màn soạn bài kiểm tra
  * ------------------------------------------------------------------------ */
 // t: question_type; c: chỉ số đáp án đúng (multiple_choice: mảng); accept: đáp án chấp nhận của short_text; p: điểm
 export const QUIZ_QUESTIONS = [
@@ -87,80 +50,6 @@ export const QUIZ_QUESTIONS = [
     { t: 'single_choice', p: 1, q: 'Ai chịu trách nhiệm kiểm tra PPE của bản thân trước mỗi ca?', o: ['Trưởng ca', 'Phòng HSE', 'Chính người lao động', 'Bảo vệ'], c: 2, e: 'Mỗi người tự kiểm tra PPE của mình trước ca; trưởng ca và HSE giám sát, hỗ trợ.' },
     { t: 'short_text', p: 1, q: 'Thiết bị bảo hộ bị hỏng được báo cáo qua kênh nào?', accept: ['Phiếu yêu cầu', 'Phiếu yêu cầu thiết bị'], e: 'Mọi thiết bị hỏng được báo qua phiếu yêu cầu để HSE ghi nhận và cấp mới.' },
 ]
-
-const PPE_PAGE = `# Bảng tra PPE theo khu vực
-
-Mỗi khu vực trong xưởng có yêu cầu thiết bị bảo hộ cá nhân (PPE) riêng. Tra bảng dưới đây **trước khi** bước vào một khu vực mới.
-
-![Sơ đồ khu vực và biển báo PPE tại cửa vào](file:6)
-
-## Yêu cầu theo khu vực
-
-| Khu vực | PPE bắt buộc | Ghi chú |
-|---|---|---|
-| Khu dập, ép | Mũ bảo hộ, kính, nút tai, giày bảo hộ | Tiếng ồn trên 85 dB |
-| Khu hàn | Mặt nạ hàn, găng chịu nhiệt, áo chống cháy | Không đeo trang sức kim loại |
-| Kho hóa chất | Kính, găng tay chống hóa chất, khẩu trang phòng độc | Đọc phiếu an toàn (SDS) trước khi thao tác |
-| Khu đóng gói | Giày bảo hộ, găng tay | |
-
-## Kiểm tra PPE trước ca
-
-1. **Mũ:** không nứt, quai cài chắc.
-2. **Kính:** không trầy xước che tầm nhìn.
-3. **Găng tay:** không rách, đúng loại cho công việc.
-4. **Giày:** mũi thép còn nguyên, đế không mòn.
-
-> Thiết bị hỏng phải **ngừng sử dụng ngay** và báo qua phiếu yêu cầu để nhận thiết bị mới.
-
-## Lưu ý theo từng khu vực
-
-### Khu dập, ép
-
-Luôn đeo nút tai trong suốt ca làm việc, kể cả khi máy tạm dừng: tiếng ồn từ các máy bên cạnh vẫn vượt ngưỡng cho phép. Không đứng trong vùng sơn vạch vàng quanh máy khi máy đang chạy.
-
-### Khu hàn
-
-Mặt nạ hàn phải có kính lọc đúng cấp độ cho dòng hàn đang dùng. Người đứng gần khu hàn nhưng không hàn cũng cần kính bảo hộ để tránh tia lửa và bức xạ.
-
-### Kho hóa chất
-
-Đọc phiếu an toàn hóa chất (SDS) dán tại cửa kho trước khi thao tác với hóa chất mới. Găng tay chống hóa chất phải đúng loại vật liệu ghi trong SDS; găng tay vải không thay thế được.
-
-### Khu đóng gói
-
-Giày bảo hộ bắt buộc vì xe nâng hoạt động thường xuyên. Đi đúng lối đi dành cho người, không đi tắt qua làn xe nâng.
-
-Bản in của bảng tra nằm ở mục tài liệu đính kèm bên dưới.`
-
-const EMERGENCY_PAGE = `# Xử lý tình huống khẩn cấp
-
-## Khi phát hiện cháy
-
-1. Hô hoán và nhấn **chuông báo cháy** gần nhất.
-2. Ngắt điện khu vực nếu an toàn.
-3. Dùng bình chữa cháy khi đám cháy nhỏ; nếu không, sơ tán ngay.
-
-## Khi có lệnh sơ tán
-
-- Đi theo biển chỉ dẫn lối thoát hiểm, **không** dùng thang máy.
-- Khu A tập trung ở bãi đỗ xe phía đông; khu B tập trung ở **sân trước cổng chính**.
-- Tổ trưởng điểm danh và báo cáo cho đội ứng phó khẩn cấp.`
-
-const INTRO_PAGE = `# Chào mừng đến với khóa An toàn lao động
-
-Khóa học giúp bạn làm việc an toàn tại khu vực sản xuất. Sau khóa học, bạn có thể:
-
-- Nhận diện các nhóm mối nguy thường gặp trong xưởng.
-- Chọn và sử dụng đúng thiết bị bảo hộ cá nhân (PPE) cho từng khu vực.
-- Xử lý đúng các tình huống khẩn cấp.
-
-## Cách hoàn thành khóa học
-
-1. Học lần lượt các chủ đề. Chủ đề sau chỉ mở khi bạn hoàn thành chủ đề trước.
-2. Làm bài kiểm tra nhanh cuối mỗi chủ đề để tự ôn.
-3. Đạt **từ 80%** ở bài kiểm tra cuối khóa trước hạn **31/10/2026**.
-
-Sổ tay an toàn của nhà máy ở mục tài liệu đính kèm.`
 
 /* --------------------------------------------------------------------------
  * Giảng viên: thông số khóa học
@@ -190,23 +79,6 @@ export const getCourseStats = () => ({
 })
 
 export const DEPTS = DEPARTMENTS.map((d) => d.short)
-
-/* --------------------------------------------------------------------------
- * Giảng viên: nội dung khóa học (course_sections → lessons)
- * ------------------------------------------------------------------------ */
-const V = (id, title, minutes, description = '') => ({ id, type: 'video', title, minutes, description, content: '', status: 'published', file: `${title}.mp4`, files: [] })
-const P = (id, title, minutes, file) => ({ id, type: 'pdf', title, minutes, description: '', content: '', status: 'published', file, files: [] })
-const R = (id, title, minutes, content, files = []) => ({ id, type: 'page', title, minutes, description: '', content, status: 'published', file: null, files })
-// minutes = time_limit_seconds / 60; attempts: 0 = không giới hạn (DB: NULL)
-const T = (id, title, is_graded, q, minutes, attempts, pass) => ({ id, type: 'quiz', title, is_graded, q, minutes, attempts, pass, status: 'published' })
-
-export const getCourseContent = () => [
-    { id: 1, title: 'Giới thiệu khóa học', items: [R(11, 'Giới thiệu khóa học', 5, INTRO_PAGE, ['so-tay-an-toan.pdf'])] },
-    { id: 2, title: 'Quy định chung & nhận diện mối nguy', items: [V(21, 'Giới thiệu & quy định chung', 8), V(22, 'Nhận diện mối nguy', 15), P(23, 'Biển báo an toàn', 10, 'bien-bao-an-toan.pdf')] },
-    { id: 3, title: 'Thiết bị bảo hộ cá nhân', items: [V(31, 'Sử dụng thiết bị bảo hộ cá nhân', 12), R(32, 'Bảng tra PPE theo khu vực', 5, PPE_PAGE, ['bang-tra-ppe.pdf']), T(33, 'Kiểm tra nhanh: Thiết bị bảo hộ', false, 7, 15, 2, 80)] },
-    { id: 4, title: 'Vận hành máy & tình huống khẩn cấp', items: [V(41, 'An toàn khi vận hành máy', 20), R(42, 'Xử lý tình huống khẩn cấp', 10, EMERGENCY_PAGE), V(43, 'Diễn tập sơ tán', 10)] },
-    { id: 5, title: 'Đánh giá cuối khóa', items: [T(51, 'Bài kiểm tra cuối khóa', true, 5, 30, 1, 80)] },
-]
 
 /* --------------------------------------------------------------------------
  * Giảng viên: soạn bài kiểm tra (c luôn là mảng)

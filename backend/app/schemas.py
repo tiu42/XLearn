@@ -462,6 +462,162 @@ class TeachCourseListOut(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Upload file (giảng viên)
+# --------------------------------------------------------------------------- #
+class UploadCreate(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=100)
+    size_bytes: int = Field(ge=1)
+
+
+class UploadTicketOut(BaseModel):
+    """Multipart upload: chia file thành part_count phần, mỗi phần part_size byte (phần cuối ngắn hơn).
+    Xin URL từng phần qua …/uploads/{id}/parts, PUT từng phần, xong gọi …/uploads/{id}/complete."""
+
+    id: int  # storage_objects.id
+    upload_id: str
+    part_size: int
+    part_count: int
+
+
+UploadId = Annotated[str, Field(min_length=1, max_length=1024)]
+PartNumber = Annotated[int, Field(ge=1, le=10_000)]
+
+
+class UploadPartsIn(BaseModel):
+    upload_id: UploadId
+    part_numbers: list[PartNumber] = Field(min_length=1, max_length=100)
+
+
+class UploadPartUrlOut(BaseModel):
+    part_number: int
+    url: str  # PUT nội dung phần; đọc header ETag của response
+
+
+class UploadPartsOut(BaseModel):
+    parts: list[UploadPartUrlOut]
+    expires_in: int
+
+
+class UploadedPartIn(BaseModel):
+    part_number: PartNumber
+    etag: str = Field(min_length=1, max_length=200)
+
+
+class UploadCompleteIn(BaseModel):
+    upload_id: UploadId
+    parts: list[UploadedPartIn] = Field(min_length=1, max_length=10_000)
+    # Trình duyệt đọc được khi xem trước file → gửi kèm để hiện thời lượng / số trang
+    duration_seconds: int | None = Field(default=None, ge=0)
+    page_count: int | None = Field(default=None, ge=1)
+
+
+class StorageFileOut(BaseModel):
+    id: int  # storage_objects.id — bài đọc tham chiếu ảnh bằng ![…](file:<id>)
+    filename: str | None
+    content_type: str
+    size_bytes: int | None
+    duration_seconds: int | None
+    page_count: int | None
+    url: str | None  # None = file chưa sẵn sàng / chưa cấu hình storage
+
+
+# --------------------------------------------------------------------------- #
+# Nội dung khóa học: chủ đề & bài học (giảng viên)
+# --------------------------------------------------------------------------- #
+LessonType = Literal["video", "pdf", "page", "quiz"]
+LessonStatus = Literal["draft", "published"]
+SectionTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
+class TeachSectionIn(BaseModel):
+    title: SectionTitle
+    description: str | None = None
+
+
+class TeachSectionUpdate(BaseModel):
+    """Trường bỏ trống = giữ nguyên; description: gửi null = xóa."""
+
+    title: SectionTitle | None = None
+    description: str | None = None
+
+
+class OrderIn(BaseModel):
+    """Toàn bộ id theo thứ tự mới (phải đủ và đúng các phần tử hiện có)."""
+
+    ids: list[int] = Field(max_length=500)
+
+
+class TeachQuizIn(BaseModel):
+    """Cài đặt cơ bản của bài kiểm tra; câu hỏi, giờ mở/đóng… soạn ở trang soạn bài kiểm tra."""
+
+    is_graded: bool = False
+    pass_score_percent: float = Field(default=70, ge=0, le=100)
+    time_limit_seconds: int | None = Field(default=None, ge=1)  # None = không giới hạn
+    max_attempts: int | None = Field(default=None, ge=1)  # None = không giới hạn
+
+
+class TeachQuizOut(TeachQuizIn):
+    question_count: int
+
+
+class TeachLessonIn(BaseModel):
+    lesson_type: LessonType
+    title: SectionTitle
+    description: str | None = None
+    content: str | None = Field(default=None, max_length=200_000)  # bài đọc: Markdown
+    media_object_id: int | None = None  # video / pdf: file đã upload xong
+    estimated_minutes: int | None = Field(default=None, ge=1, le=10_000)
+    status: LessonStatus = "draft"
+    attachment_ids: list[int] = Field(default_factory=list, max_length=20)  # theo thứ tự hiển thị
+    quiz: TeachQuizIn | None = None  # chỉ với lesson_type = quiz
+
+
+class TeachLessonUpdate(BaseModel):
+    """Trường bỏ trống = giữ nguyên. Đổi được loại giữa video / pdf / page, không đổi được từ/sang quiz.
+    section_id: chuyển bài sang chủ đề khác (xếp cuối chủ đề đó)."""
+
+    lesson_type: LessonType | None = None
+    section_id: int | None = None
+    title: SectionTitle | None = None
+    description: str | None = None
+    content: str | None = Field(default=None, max_length=200_000)
+    media_object_id: int | None = None
+    estimated_minutes: int | None = Field(default=None, ge=1, le=10_000)
+    status: LessonStatus | None = None
+    attachment_ids: list[int] | None = Field(default=None, max_length=20)
+    quiz: TeachQuizIn | None = None
+
+
+class TeachLessonOut(BaseModel):
+    id: int
+    section_id: int
+    lesson_type: LessonType
+    title: str
+    description: str | None
+    content: str | None
+    estimated_minutes: int | None
+    status: LessonStatus
+    media: StorageFileOut | None
+    attachments: list[StorageFileOut]
+    images: list[StorageFileOut]  # ảnh nhúng trong bài đọc (file:<id>)
+    quiz: TeachQuizOut | None
+    updated_at: datetime
+
+
+class TeachSectionOut(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    lessons: list[TeachLessonOut]
+
+
+class TeachContentOut(BaseModel):
+    can_edit: bool
+    sections: list[TeachSectionOut]
+
+
+# --------------------------------------------------------------------------- #
 # Dòng thời gian (học viên)
 # --------------------------------------------------------------------------- #
 class TimelineItemOut(BaseModel):
