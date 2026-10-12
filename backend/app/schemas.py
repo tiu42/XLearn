@@ -149,3 +149,34 @@ class MyCourseListOut(BaseModel):
     total: int
     # Phòng ban của mọi khóa đang ghi danh (không phụ thuộc bộ lọc) → dựng ô lọc phòng ban
     departments: list[DepartmentOut]
+
+
+LessonProgressStatus = Literal["not_started", "in_progress", "completed"]
+
+
+class MyLessonOut(BaseModel):
+    id: int
+    title: str
+    lesson_type: str
+    estimated_minutes: int | None
+    status: LessonProgressStatus
+
+
+class MySectionOut(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    total_lessons: int
+    completed_lessons: int
+    status: LessonProgressStatus
+    # Khóa học tuần tự: chủ đề bị khóa khi còn chủ đề đứng trước chưa hoàn thành
+    locked: bool
+    lessons: list[MyLessonOut]
+
+
+class MyCourseDetailOut(MyCourseOut):
+    description: str | None
+    is_sequential: bool
+    # Điểm đạt của bài kiểm tra tính điểm cuối cùng trong khóa; None = khóa không có bài tính điểm
+    final_pass_percent: float | None
+    sections: list[MySectionOut]
