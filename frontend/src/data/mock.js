@@ -224,7 +224,7 @@ const ATLD = {
             items: [
                 { t: 'video', name: 'Giới thiệu & quy định chung', minutes: 8, done: true, description: 'Nội quy ra vào xưởng và trách nhiệm của người lao động.', files: [] },
                 { t: 'video', name: 'Nhận diện mối nguy', minutes: 15, done: true, description: 'Các nhóm mối nguy cơ học, điện, hóa chất, tiếng ồn.', files: [] },
-                { t: 'pdf', name: 'Biển báo an toàn', minutes: 10, done: true, pages: 18, description: 'Tài liệu PDF các nhóm biển báo cấm, cảnh báo, bắt buộc, chỉ dẫn.', files: [] },
+                { t: 'pdf', name: 'Biển báo an toàn', minutes: 10, done: true, pages: 5, url: '/samples/bien-bao-an-toan.pdf', description: 'Tài liệu PDF các nhóm biển báo cấm, cảnh báo, bắt buộc, chỉ dẫn.', files: [] },
             ],
         },
         {

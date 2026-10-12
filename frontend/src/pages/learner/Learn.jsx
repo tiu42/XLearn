@@ -26,6 +26,26 @@ function itemMeta(x) {
     return `${graded ? 'Tính điểm' : 'Luyện tập'} · ${minutes} phút · ${attempts === 0 ? 'không giới hạn lượt' : `${attempts} lượt`}`
 }
 
+/** Một dòng chữ: quá dài thì cắt "…"; khi hover nút cha (.next-topic) thì chạy chữ để đọc hết. */
+function Marquee({ text }) {
+    const box = useRef(null)
+    const [shift, setShift] = useState(0)
+    useEffect(() => {
+        const el = box.current
+        const measure = () => setShift(Math.max(0, el.firstChild.scrollWidth - el.clientWidth))
+        measure()
+        const ro = new ResizeObserver(measure)
+        ro.observe(el)
+        return () => ro.disconnect()
+    }, [text])
+    return (
+        <span ref={box} title={shift > 0 ? text : undefined} className={`marquee${shift > 0 ? ' marquee--overflow' : ''}`}
+            style={{ '--marquee-shift': `${shift}px`, '--marquee-time': `${Math.max(3, shift / 30 + 2)}s` }}>
+            <span className="marquee__inner">{text}</span>
+        </span>
+    )
+}
+
 /** Bao bọc: đọc ?topic=N, giữ trạng thái hoàn thành của cả khóa trong phiên. */
 export default function Learn() {
     const { courseId } = useParams()
@@ -159,17 +179,17 @@ function TopicView({ course, si, locked, courseId, markDone }) {
                         <div className="learn-side__foot">
                             {nextIdx < 0 ? (
                                 <Link to={`/courses/${courseId}`} className="next-topic">
-                                    <span><small style={{ color: 'var(--primary-soft-2)' }}>Chủ đề cuối</small>Về trang khóa học</span><span aria-hidden="true">›</span>
+                                    <span className="next-topic__text"><small>Chủ đề cuối</small><Marquee text="Về trang khóa học" /></span><span aria-hidden="true" className="next-topic__arrow">›</span>
                                 </Link>
                             ) : allDone || !course.is_sequential ? (
                                 <Link to={topicUrl(nextIdx)} className="next-topic">
-                                    <span><small style={{ color: 'var(--primary-soft-2)' }}>Chủ đề tiếp theo</small>{sectionLabel(nextIdx)}: {course.sections[nextIdx].title}</span>
-                                    <span aria-hidden="true">›</span>
+                                    <span className="next-topic__text"><small>Chủ đề tiếp theo</small><Marquee text={`${sectionLabel(nextIdx)}: ${course.sections[nextIdx].title}`} /></span>
+                                    <span aria-hidden="true" className="next-topic__arrow">›</span>
                                 </Link>
                             ) : (
                                 <>
                                     <button type="button" className="next-topic" disabled>
-                                        <span><small>Chủ đề tiếp theo</small>{sectionLabel(nextIdx)}: {course.sections[nextIdx].title}</span><LockIcon />
+                                        <span className="next-topic__text"><small>Chủ đề tiếp theo</small><Marquee text={`${sectionLabel(nextIdx)}: ${course.sections[nextIdx].title}`} /></span><LockIcon />
                                     </button>
                                     <span style={{ fontSize: 12 }} className="text-2">Hoàn thành tất cả bài học trong chủ đề này để mở.</span>
                                 </>
@@ -249,18 +269,33 @@ function VideoLesson({ item }) {
     )
 }
 
+/** Nhúng trình xem PDF có sẵn của trình duyệt; trình duyệt không hỗ trợ (đa số di động) thì hiện nút mở/tải. */
 function PdfLesson({ item }) {
+    const file = `${item.name}.pdf`
     return (
-        <div className="pdf-viewer">
-            <div className="pdf-viewer__bar">
-                <span className="row" style={{ gap: 8 }}><FileIcon />{item.name}.pdf</span>
-                <span className="small text-2">Trang 1 / {item.pages}</span>
-                <a href="#download" className="btn btn--sm" style={{ color: 'var(--primary)' }}>Tải về</a>
+        <div className="stack" style={{ gap: 12 }}>
+            <div className="pdf-viewer">
+                <div className="pdf-viewer__bar">
+                    <span className="row" style={{ gap: 8, minWidth: 0 }}><FileIcon />{file}<span className="small muted" style={{ fontWeight: 400 }}>· {item.pages} trang</span></span>
+                    {item.url && (
+                        <span className="row" style={{ gap: 8 }}>
+                            <a href={item.url} target="_blank" rel="noreferrer" className="btn btn--sm">Mở tab mới</a>
+                            <a href={item.url} download={file} className="btn btn--sm" style={{ color: 'var(--primary)' }}>Tải về</a>
+                        </span>
+                    )}
+                </div>
+                {item.url ? (
+                    <object data={`${item.url}#view=FitH`} type="application/pdf" className="pdf-viewer__frame" aria-label={`Tài liệu ${item.name}`}>
+                        <div className="pdf-viewer__fallback">
+                            <span>Trình duyệt này không hiển thị được PDF trực tiếp.</span>
+                            <a href={item.url} target="_blank" rel="noreferrer" className="btn btn--primary">Mở tài liệu</a>
+                        </div>
+                    </object>
+                ) : (
+                    <div className="pdf-viewer__fallback">Tài liệu chưa được tải lên.</div>
+                )}
             </div>
-            <div className="pdf-viewer__page" role="img" aria-label={`Khung xem tài liệu ${item.name}`}>
-                <span>[TRÌNH XEM PDF]</span>
-                <span className="small">{item.description}</span>
-            </div>
+            {item.description && <p className="prose">{item.description}</p>}
         </div>
     )
 }

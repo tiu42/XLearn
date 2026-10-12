@@ -48,7 +48,13 @@ export default function QuizAttempt({ title, questions, answers, setAnswers, lef
                         return (
                             <section key={q.q} id={`q${i + 1}`} aria-labelledby={`qh${i + 1}`} className="q-card">
                                 <div className="row-between">
-                                    <span className="q-num">Câu {i + 1} / {total} · {TYPE_LABEL[q.t]}</span>
+                                    <span className="row" style={{ gap: 10 }}>
+                                        <span className="q-num">Câu {i + 1} / {total}</span>
+                                        <span className={`q-type${multi ? ' q-type--multi' : ''}`}>
+                                            {!isText(q) && <span aria-hidden="true" className={`q-mark q-mark--sm${multi ? ' q-mark--check' : ''}`} />}
+                                            {TYPE_LABEL[q.t]}
+                                        </span>
+                                    </span>
                                     <span className={`pill pill--tag ${has ? 'pill--blue' : 'pill--gray'}`}>{has ? 'Đã trả lời' : 'Chưa trả lời'}</span>
                                 </div>
                                 {isText(q) ? (
@@ -61,7 +67,10 @@ export default function QuizAttempt({ title, questions, answers, setAnswers, lef
                                 ) : (
                                     <fieldset>
                                         <legend id={`qh${i + 1}`}>{q.q}</legend>
-                                        <span className="q-hint" style={{ marginBottom: 4 }}>{TYPE_HINT[q.t]}</span>
+                                        <span className="q-hint" style={{ marginBottom: 4 }}>
+                                            {TYPE_HINT[q.t]}
+                                            {multi && <span className="q-count" aria-live="polite"> · Đã chọn {a?.length ?? 0}</span>}
+                                        </span>
                                         {q.o.map((text, k) => {
                                             const on = multi ? !!a?.includes(k) : a === k
                                             return (
@@ -69,6 +78,7 @@ export default function QuizAttempt({ title, questions, answers, setAnswers, lef
                                                     <input type={multi ? 'checkbox' : 'radio'} name={`q${i}`} checked={on} onChange={() => pick(i, k, multi)} />
                                                     <span className={`q-letter${multi ? ' q-letter--sq' : ''}`}>{LETTERS[k]}</span>
                                                     <span style={{ flex: 1, fontSize: 16, lineHeight: 1.5 }}>{text}</span>
+                                                    <span aria-hidden="true" className={`q-mark${multi ? ' q-mark--check' : ''}`} />
                                                 </label>
                                             )
                                         })}

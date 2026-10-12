@@ -65,7 +65,7 @@
 .x-btn { width: 36px; height: 36px; flex: none; border: 1px solid var(--danger-border); border-radius: 6px; background: #fff; font-size: 18px; color: var(--danger); }
 .x-btn:disabled { border-color: #E2E6EA; color: #ADB5BD; background: #fff; }
 .add-q { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; border: 2px dashed var(--dash-border); border-radius: 8px; background: #fff; }
-.qe-side { flex: 1 1 320px; min-width: 0; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px; }
+.qe-side { flex: 1 1 320px; min-width: 0; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: calc(var(--header-h) + 16px); }
 .topic-box li.is-draft { background: #FBFCFD; }
 .topic-box li.is-draft .item-tag { opacity: .6; }
 .att-edit { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
