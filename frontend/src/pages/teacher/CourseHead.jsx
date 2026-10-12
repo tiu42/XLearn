@@ -1,5 +1,7 @@
 import { Link, NavLink } from 'react-router-dom'
+import { errorMessage } from '../../api'
 import { COURSE_STATUS, deptShort, fmtDate } from '../../data/mock'
+import { fromDueAt } from './teachApi'
 
 /** Phần đầu trang quản lý một khóa: đường dẫn, tên, trạng thái và tab con. */
 export default function CourseHead({ course, action }) {
@@ -17,7 +19,7 @@ export default function CourseHead({ course, action }) {
                     </div>
                     {action ?? (
                         <span className="text-2" style={{ fontSize: 14 }}>
-                            {course.code} · {deptShort(course.department)} · {course.is_mandatory ? 'Bắt buộc' : 'Tự chọn'} · Hạn mặc định {fmtDate(course.default_due_at)}
+                            {course.code} · {course.department ? deptShort(course.department.code) : 'Chung'} · {course.is_mandatory ? 'Bắt buộc' : 'Tự chọn'} · Hạn mặc định {fmtDate(fromDueAt(course.default_due_at))}
                         </span>
                     )}
                 </div>
@@ -27,5 +29,20 @@ export default function CourseHead({ course, action }) {
                 </nav>
             </div>
         </div>
+    )
+}
+
+/** Thay cho cả trang khi đang tải khóa (useTeachCourse) hoặc không mở được khóa. */
+export function CourseLoadState({ error }) {
+    if (!error) return <main className="container container--1280 container--teach"><div className="center-state">Đang tải…</div></main>
+    const code = error.response?.status
+    const text = code === 404 || code === 422 ? 'Không tìm thấy khóa học.'
+        : code === 403 ? 'Bạn không phụ trách khóa học này.'
+            : errorMessage(error, 'Không tải được khóa học.')
+    return (
+        <main className="container container--1280 container--teach">
+            <Link to="/teach" className="back-link">‹ Khóa học</Link>
+            <div role="alert" className="status-msg status-msg--error">{text}</div>
+        </main>
     )
 }

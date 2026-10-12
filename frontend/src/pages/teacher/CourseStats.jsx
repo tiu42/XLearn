@@ -3,8 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import { initials } from '../../auth/roles'
 import { ConfirmDialog, Modal, ProgressBar, SearchInput, SelectFilter, Stat } from '../../components/ui'
 import { useSelection, useToast } from '../../components/hooks'
-import { DEPTS, getCourse, getCourseStats, todayVN } from '../../data/mock'
-import CourseHead from './CourseHead'
+import { DEPTS, getCourseStats, todayVN } from '../../data/mock'
+import CourseHead, { CourseLoadState } from './CourseHead'
+import { useTeachCourse } from './teachApi'
 import './teacher.css'
 
 const ST_TEXT = { done: 'Đã hoàn thành', prog: 'Đang học', not: 'Chưa bắt đầu' }
@@ -13,7 +14,7 @@ const TAG = { video: ['Video', 'tag-video'], pdf: ['PDF', 'tag-pdf'], page: ['B�
 
 export default function CourseStats() {
     const { courseId } = useParams()
-    const course = useMemo(() => getCourse(courseId), [courseId])
+    const { data: course, error, isPending } = useTeachCourse(courseId)
     const seed = useMemo(() => getCourseStats(), [])
     const items = seed.items
     const N = items.length
@@ -58,6 +59,8 @@ export default function CourseStats() {
         setAdding(false)
         flash(`Đã thêm ${chosen.length} học viên vào khóa học.`)
     }
+
+    if (isPending || error) return <CourseLoadState error={error} />
 
     return (
         <>

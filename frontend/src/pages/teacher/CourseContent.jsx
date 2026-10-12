@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useToast } from '../../components/hooks'
 import MarkdownEditor from '../../components/MarkdownEditor'
 import { ConfirmDialog, Modal } from '../../components/ui'
-import { getCourse, getCourseContent } from '../../data/mock'
-import CourseHead from './CourseHead'
+import { getCourseContent } from '../../data/mock'
+import CourseHead, { CourseLoadState } from './CourseHead'
+import { useTeachCourse } from './teachApi'
 import './teacher.css'
 
 const TAGS = { video: ['VIDEO', 'tag-video'], pdf: ['PDF', 'tag-pdf'], page: ['BÀI ĐỌC', 'tag-page'], quiz: ['QUIZ', 'tag-quiz'], exam: ['KIỂM TRA', 'tag-exam'] }
@@ -31,7 +32,7 @@ const MoveBtns = ({ i, n, onMove, what }) => (
 export default function CourseContent() {
     const { courseId } = useParams()
     const navigate = useNavigate()
-    const course = useMemo(() => getCourse(courseId), [courseId])
+    const { data: course, error, isPending } = useTeachCourse(courseId)
     const [topics, setTopics] = useState(getCourseContent)
     const [modal, setModal] = useState(null) // { kind: lesson|test|topic, tid, isNew }
     const [ed, setEd] = useState(null)
@@ -98,6 +99,8 @@ export default function CourseContent() {
         setEd({ id: ++nid.current, type: 'quiz', title: '', is_graded: false, q: 0, minutes: 15, attempts: 2, pass: 80, status: 'draft' })
         setModal({ kind: 'test', tid, isNew: true })
     }
+
+    if (isPending || error) return <CourseLoadState error={error} />
 
     return (
         <>

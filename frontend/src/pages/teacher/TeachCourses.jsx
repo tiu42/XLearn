@@ -1,17 +1,41 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { errorMessage } from '../../api'
 import { useToast } from '../../components/hooks'
 import { ConfirmDialog, Modal, ProgressBar, SearchInput, SelectFilter, Stat } from '../../components/ui'
-import { COURSE_STATUS, DEPARTMENTS, deptShort, fmtDate, getTeacherCourses } from '../../data/mock'
+import { COURSE_STATUS, deptShort, fmtDate } from '../../data/mock'
+import { fromDueAt, toDueAt, useDeleteCourse, useDepartments, useSaveCourse, useTeachCourses } from './teachApi'
 import './teacher.css'
 
 const EMPTY = {
-    code: '', title: '', short_description: '', description: '', department: 'HSE',
+    code: '', title: '', short_description: '', description: '', department_id: '',
     is_mandatory: true, is_sequential: false, default_due_at: '', status: 'draft',
 }
 
+// Khóa học (API) → giá trị form: null → '', hạn hoàn thành → 'YYYY-MM-DD' giờ Việt Nam
+const toForm = (c) => ({
+    ...EMPTY,
+    ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, c[k] ?? EMPTY[k]])),
+    department_id: c.department ? String(c.department.id) : '',
+    default_due_at: fromDueAt(c.default_due_at),
+})
+
+// Giá trị form → body API: chuỗi rỗng → null
+const toBody = (f) => ({
+    ...f,
+    code: f.code.trim().toUpperCase(),
+    title: f.title.trim(),
+    short_description: f.short_description.trim() || null,
+    description: f.description.trim() || null,
+    department_id: f.department_id ? Number(f.department_id) : null,
+    default_due_at: toDueAt(f.default_due_at),
+})
+
 export default function TeachCourses() {
-    const [courses, setCourses] = useState(getTeacherCourses)
+    const { data, error, isPending } = useTeachCourses()
+    const { data: departments = [] } = useDepartments()
+    const saveMut = useSaveCourse()
+    const delMut = useDeleteCourse()
     const [q, setQ] = useState('')
     const [f, setF] = useState('all')
     const [modal, setModal] = useState(null) // null | 'new' | id
@@ -20,10 +44,11 @@ export default function TeachCourses() {
     const [delId, setDelId] = useState(null)
     const [toast, flash] = useToast()
 
+    const courses = data?.items ?? []
     const list = courses.filter((c) => (f === 'all' || c.status === f)
         && (!q || `${c.title} ${c.code}`.toLowerCase().includes(q.toLowerCase())))
-    const enrol = courses.reduce((s, c) => s + c.learners, 0)
-    const done = courses.reduce((s, c) => s + c.done, 0)
+    const enrol = courses.reduce((s, c) => s + c.learner_count, 0)
+    const done = courses.reduce((s, c) => s + c.completed_count, 0)
     const count = (st) => courses.filter((c) => c.status === st).length
     const delCourse = courses.find((c) => c.id === delId)
     const set = (k) => (e) => {
@@ -35,27 +60,34 @@ export default function TeachCourses() {
     const openForm = (c) => {
         setErrs({})
         setModal(c ? c.id : 'new')
-        setForm(c ? Object.fromEntries(Object.keys(EMPTY).map((k) => [k, c[k] ?? EMPTY[k]])) : EMPTY)
+        setForm(c ? toForm(c) : EMPTY)
     }
 
     function save() {
-        const code = form.code.trim().toUpperCase()
+        const body = toBody(form)
         const e = {}
-        if (!code) e.code = 'Vui lòng nhập mã khóa học.'
-        // courses.code là UNIQUE
-        else if (courses.some((c) => c.code === code && c.id !== modal)) e.code = 'Mã khóa học đã tồn tại.'
-        if (!form.title.trim()) e.title = 'Vui lòng nhập tên khóa học.'
+        if (!body.code) e.code = 'Vui lòng nhập mã khóa học.'
+        if (!body.title) e.title = 'Vui lòng nhập tên khóa học.'
         if (Object.keys(e).length) { setErrs(e); return }
-        const data = { ...form, code }
-        if (modal === 'new') {
-            const id = Math.max(0, ...courses.map((c) => c.id)) + 1
-            setCourses((cs) => [{ id, lessons: 0, tests: 0, learners: 0, done: 0, thumbnail_url: null, colors: ['#0F6CBF', '#2A82CF'], ...data }, ...cs])
-            flash(`Đã tạo khóa học “${form.title}”. Vào “Nội dung” để thêm chủ đề và bài học.`)
-        } else {
-            setCourses((cs) => cs.map((c) => (c.id === modal ? { ...c, ...data } : c)))
-            flash('Đã lưu thay đổi.')
-        }
-        setModal(null)
+        const isNew = modal === 'new'
+        saveMut.mutate({ id: isNew ? null : modal, body }, {
+            onSuccess: (c) => {
+                setModal(null)
+                flash(isNew ? `Đã tạo khóa học “${c.title}”. Vào “Nội dung” để thêm chủ đề và bài học.` : 'Đã lưu thay đổi.')
+            },
+            // courses.code là UNIQUE → 409 hiện ngay dưới ô mã khóa
+            onError: (err) => setErrs(err.response?.status === 409
+                ? { code: errorMessage(err) }
+                : { form: errorMessage(err, 'Không lưu được khóa học.') }),
+        })
+    }
+
+    function doDelete() {
+        const c = delCourse
+        delMut.mutate(c.id, {
+            onSuccess: () => { setDelId(null); flash(`Đã xóa khóa học “${c.title}”.`) },
+            onError: (err) => { setDelId(null); flash(errorMessage(err, 'Không xóa được khóa học.')) },
+        })
     }
 
     return (
@@ -88,26 +120,29 @@ export default function TeachCourses() {
                         <tbody>
                             {list.map((c) => {
                                 const st = COURSE_STATUS[c.status]
-                                const r = c.learners ? Math.round((c.done / c.learners) * 100) : 0
+                                const r = c.learner_count ? Math.round((c.completed_count / c.learner_count) * 100) : 0
                                 return (
                                     <tr key={c.id}>
                                         <td>
                                             <Link to={`/teach/courses/${c.id}/stats`} className="cell-title">{c.title}</Link>
-                                            <div className="small text-2">{c.code} · {deptShort(c.department)} · {c.is_mandatory ? 'Bắt buộc' : 'Tự chọn'}{c.is_sequential ? ' · Học tuần tự' : ''}</div>
+                                            <div className="small text-2">
+                                                {c.code} · {c.department ? deptShort(c.department.code) : 'Chung'} · {c.is_mandatory ? 'Bắt buộc' : 'Tự chọn'}
+                                                {c.is_sequential ? ' · Học tuần tự' : ''}{c.my_role === 'assistant' ? ' · Trợ giảng' : ''}
+                                            </div>
                                         </td>
                                         <td><span className={`pill pill--${st.tone}`}>{st.label}</span></td>
-                                        <td><Link to={`/teach/courses/${c.id}/content`} style={{ color: 'inherit' }}>{c.lessons} bài học · {c.tests} bài kiểm tra</Link></td>
-                                        <td>{c.learners}</td>
+                                        <td><Link to={`/teach/courses/${c.id}/content`} style={{ color: 'inherit' }}>{c.lesson_count} bài học · {c.quiz_count} bài kiểm tra</Link></td>
+                                        <td>{c.learner_count}</td>
                                         <td>
                                             <div className="progress-row">
                                                 <div style={{ width: 100 }}><ProgressBar value={r} done={r >= 80} label={`Tỉ lệ hoàn thành ${c.title}`} /></div>
-                                                <span style={{ fontWeight: 600 }}>{c.learners ? `${r}%` : '—'}</span>
+                                                <span style={{ fontWeight: 600 }}>{c.learner_count ? `${r}%` : '—'}</span>
                                             </div>
                                         </td>
-                                        <td>{fmtDate(c.default_due_at)}</td>
+                                        <td>{fmtDate(fromDueAt(c.default_due_at))}</td>
                                         <td><div className="actions">
-                                            <button type="button" className="btn btn--sm" onClick={() => openForm(c)} aria-label={`Sửa khóa ${c.title}`}>Sửa</button>
-                                            <button type="button" className="btn btn--sm btn--danger-ghost" onClick={() => setDelId(c.id)} aria-label={`Xóa khóa ${c.title}`}>Xóa</button>
+                                            {c.can_edit && <button type="button" className="btn btn--sm" onClick={() => openForm(c)} aria-label={`Sửa khóa ${c.title}`}>Sửa</button>}
+                                            {c.can_delete && <button type="button" className="btn btn--sm btn--danger-ghost" onClick={() => setDelId(c.id)} aria-label={`Xóa khóa ${c.title}`}>Xóa</button>}
                                         </div></td>
                                     </tr>
                                 )
@@ -115,16 +150,23 @@ export default function TeachCourses() {
                         </tbody>
                     </table>
                 </div>
-                {list.length === 0 && <p className="empty-note">Không có khóa học nào phù hợp.</p>}
+                {isPending && <p className="empty-note">Đang tải…</p>}
+                {error && <div role="alert" className="status-msg status-msg--error" style={{ margin: 16 }}>{errorMessage(error, 'Không tải được danh sách khóa học.')}</div>}
+                {data && list.length === 0 && (
+                    <p className="empty-note">{courses.length ? 'Không có khóa học nào phù hợp.' : 'Bạn chưa phụ trách khóa học nào. Bấm “Tạo khóa học” để bắt đầu.'}</p>
+                )}
             </section>
 
             {modal !== null && (
                 <Modal title={modal === 'new' ? 'Tạo khóa học' : 'Sửa khóa học'} width={620} onClose={() => setModal(null)}
                     footer={<>
                         <button type="button" className="btn" onClick={() => setModal(null)}>Hủy</button>
-                        <button type="button" className="btn btn--primary" onClick={save}>{modal === 'new' ? 'Tạo khóa học' : 'Lưu thay đổi'}</button>
+                        <button type="button" className="btn btn--primary" onClick={save} disabled={saveMut.isPending}>
+                            {saveMut.isPending ? 'Đang lưu…' : modal === 'new' ? 'Tạo khóa học' : 'Lưu thay đổi'}
+                        </button>
                     </>}>
                     <div className="dialog__body">
+                        {errs.form && <div role="alert" className="status-msg status-msg--error">{errs.form}</div>}
                         <div className="field-row">
                             <div className="field field--narrow">
                                 <label htmlFor="f-c">Mã khóa <span className="req">*</span></label>
@@ -149,8 +191,9 @@ export default function TeachCourses() {
                         </div>
                         <div className="field-row">
                             <div className="field"><label htmlFor="f-p">Phòng ban phụ trách</label>
-                                <select id="f-p" className="select" value={form.department} onChange={set('department')}>
-                                    {DEPARTMENTS.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+                                <select id="f-p" className="select" value={form.department_id} onChange={set('department_id')}>
+                                    <option value="">Chung (không thuộc phòng ban)</option>
+                                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                                 </select></div>
                             <div className="field"><label htmlFor="f-k">Loại</label>
                                 <select id="f-k" className="select" value={form.is_mandatory ? 'mandatory' : 'optional'}
@@ -178,10 +221,10 @@ export default function TeachCourses() {
             )}
 
             {delCourse && (
-                <ConfirmDialog title="Xóa khóa học?" confirmLabel="Xóa khóa học"
-                    text={`Khóa “${delCourse.title}” cùng toàn bộ bài học, bài kiểm tra${delCourse.learners ? ` và tiến độ của ${delCourse.learners} học viên` : ''} sẽ bị xóa. Không thể hoàn tác.`}
+                <ConfirmDialog title="Xóa khóa học?" confirmLabel={delMut.isPending ? 'Đang xóa…' : 'Xóa khóa học'}
+                    text={`Khóa “${delCourse.title}” sẽ bị gỡ khỏi danh sách của giảng viên${delCourse.learner_count ? ` và ${delCourse.learner_count} học viên đang ghi danh` : ''}. Không thể hoàn tác.`}
                     onCancel={() => setDelId(null)}
-                    onConfirm={() => { setCourses((cs) => cs.filter((c) => c.id !== delCourse.id)); setDelId(null); flash(`Đã xóa khóa học “${delCourse.title}”.`) }} />
+                    onConfirm={() => !delMut.isPending && doDelete()} />
             )}
             {toast}
         </main>

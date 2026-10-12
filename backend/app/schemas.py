@@ -395,6 +395,73 @@ class QuizSubmitOut(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Quản lý khóa học (giảng viên)
+# --------------------------------------------------------------------------- #
+CourseStatus = Literal["draft", "published", "archived"]
+InstructorRole = Literal["owner", "co_instructor", "assistant"]
+# Mã khóa: bỏ khoảng trắng, viết hoa (atld-01 → ATLD-01) để UNIQUE không bị lách bằng chữ thường
+CourseCode = Annotated[str, StringConstraints(strip_whitespace=True, to_upper=True, min_length=1, max_length=50)]
+CourseTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
+class TeachCourseCreate(BaseModel):
+    code: CourseCode
+    title: CourseTitle
+    short_description: str | None = Field(default=None, max_length=500)
+    description: str | None = None
+    department_id: int | None = None
+    is_mandatory: bool = False
+    is_sequential: bool = False
+    default_due_at: datetime | None = None
+    status: CourseStatus = "draft"
+
+
+class TeachCourseUpdate(BaseModel):
+    """Trường bỏ trống = giữ nguyên. Các trường cho phép NULL: gửi null = xóa giá trị."""
+
+    code: CourseCode | None = None
+    title: CourseTitle | None = None
+    short_description: str | None = Field(default=None, max_length=500)
+    description: str | None = None
+    department_id: int | None = None
+    is_mandatory: bool | None = None
+    is_sequential: bool | None = None
+    default_due_at: datetime | None = None
+    status: CourseStatus | None = None
+
+
+class TeachCourseOut(BaseModel):
+    id: int
+    code: str
+    title: str
+    short_description: str | None
+    description: str | None
+    department: DepartmentOut | None
+    is_mandatory: bool
+    is_sequential: bool
+    default_due_at: datetime | None
+    status: CourseStatus
+    published_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    thumbnail_url: str | None
+    # Vai trò của user trong khóa; None = admin không phụ trách khóa
+    my_role: InstructorRole | None
+    can_edit: bool  # sửa thông tin khóa (owner, co_instructor, admin)
+    can_delete: bool  # xóa khóa (owner, admin)
+    # Số liệu: bài học / bài kiểm tra chưa xóa (kể cả bản nháp), học viên chưa bị xóa khỏi khóa
+    lesson_count: int
+    quiz_count: int
+    learner_count: int
+    completed_count: int
+
+
+class TeachCourseListOut(BaseModel):
+    items: list[TeachCourseOut]
+    total: int
+
+
+# --------------------------------------------------------------------------- #
 # Dòng thời gian (học viên)
 # --------------------------------------------------------------------------- #
 class TimelineItemOut(BaseModel):
