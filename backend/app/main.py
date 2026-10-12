@@ -11,7 +11,7 @@ from .config import get_settings
 from .lifecycle import lifecycle
 from .logging_utils import log_event
 from .redis_client import get_redis, ping
-from .routers import admin_users, auth, my_courses
+from .routers import admin_users, auth, learn, my_courses
 
 FRUITS_KEY = "fruits:all"
 
@@ -44,6 +44,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(admin_users.router)
 app.include_router(my_courses.router)
+app.include_router(learn.router)
 
 
 @app.get("/health")

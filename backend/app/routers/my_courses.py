@@ -8,6 +8,9 @@ chủ đề đã xóa mềm cũng không được tính, để số liệu khớ
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -143,30 +146,46 @@ def _progress_status(n_done: int, n_started: int, n_total: int) -> str:
     return "in_progress" if n_started else "not_started"
 
 
-@router.get("/{course_id}", response_model=MyCourseDetailOut,
-            responses={404: {"description": "Không có khóa học hoặc user không (còn) được ghi danh"}})
-def get_my_course(
-    course_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Trang khóa học: thông tin khóa, tiến độ và danh sách chủ đề → bài học của user.
-
-    Chỉ trả chủ đề có ít nhất một bài học viên nhìn thấy. Nội dung bài (video, Markdown, câu hỏi)
-    không có ở đây; giao diện học lấy riêng theo từng bài.
-    """
-    row = db.execute(_base_query(user.id).where(Course.id == course_id)
+def get_enrollment_or_404(db: Session, user_id: int, course_id: int) -> tuple[Enrollment, Course]:
+    """Ghi danh còn hiệu lực của user vào khóa (khóa đang mở hoặc lưu trữ), không có → 404."""
+    row = db.execute(_base_query(user_id).where(Course.id == course_id)
                      .options(selectinload(Course.department))).first()
     if row is None:
         # Cùng một thông báo cho "không tồn tại" và "không được ghi danh" → không lộ khóa học khác
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail="Không tìm thấy khóa học hoặc bạn không được ghi danh vào khóa này")
     enrollment, course = row
+    return enrollment, course
 
+
+@dataclass
+class Outline:
+    sections: list[MySectionOut]
+    final_pass_percent: float | None
+    last_activity: datetime | None
+
+    @property
+    def total_lessons(self) -> int:
+        return sum(s.total_lessons for s in self.sections)
+
+    @property
+    def completed_lessons(self) -> int:
+        return sum(s.completed_lessons for s in self.sections)
+
+    def find_lesson(self, lesson_id: int) -> MySectionOut | None:
+        """Chủ đề chứa bài; None nếu bài không thuộc khóa hoặc học viên không nhìn thấy."""
+        return next((s for s in self.sections if any(x.id == lesson_id for x in s.lessons)), None)
+
+
+def build_outline(db: Session, course: Course, user_id: int) -> Outline:
+    """Chủ đề → bài học viên nhìn thấy, kèm trạng thái từng bài và chủ đề nào bị khóa.
+
+    Chỉ gồm chủ đề có ít nhất một bài học viên nhìn thấy.
+    """
     rows = db.execute(
         _visible_lessons(Lesson, CourseSection, LessonProgress.status, LessonProgress.updated_at,
                          Quiz.is_graded, Quiz.pass_score_percent)
-        .outerjoin(LessonProgress, (LessonProgress.lesson_id == Lesson.id) & (LessonProgress.user_id == user.id))
+        .outerjoin(LessonProgress, (LessonProgress.lesson_id == Lesson.id) & (LessonProgress.user_id == user_id))
         .outerjoin(Quiz, Quiz.lesson_id == Lesson.id)
         .where(Lesson.course_id == course.id)
         .order_by(CourseSection.sort_order, CourseSection.id, Lesson.sort_order, Lesson.id)).all()
@@ -197,10 +216,26 @@ def get_my_course(
         if course.is_sequential and s.status != "completed":
             blocked = True
 
-    n_total = sum(s.total_lessons for s in sections.values())
-    n_done = sum(s.completed_lessons for s in sections.values())
+    return Outline(list(sections.values()), final_pass, last_activity)
+
+
+@router.get("/{course_id}", response_model=MyCourseDetailOut,
+            responses={404: {"description": "Không có khóa học hoặc user không (còn) được ghi danh"}})
+def get_my_course(
+    course_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Trang khóa học: thông tin khóa, tiến độ và danh sách chủ đề → bài học của user.
+
+    Nội dung bài (video, Markdown, câu hỏi) không có ở đây; giao diện học lấy riêng theo từng bài
+    (GET /me/courses/{course_id}/lessons/{lesson_id}).
+    """
+    enrollment, course = get_enrollment_or_404(db, user.id, course_id)
+    outline = build_outline(db, course, user.id)
     return MyCourseDetailOut(
-        **_course_fields(enrollment, course, n_total, n_done, last_activity),
+        **_course_fields(enrollment, course, outline.total_lessons, outline.completed_lessons,
+                         outline.last_activity),
         description=course.description, is_sequential=course.is_sequential,
-        final_pass_percent=final_pass, sections=list(sections.values()),
+        final_pass_percent=outline.final_pass_percent, sections=outline.sections,
     )

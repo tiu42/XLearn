@@ -1,29 +1,34 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { errorMessage } from '../../api'
 import { LearnerHeader } from '../../components/AppHeader'
-import { ChevronLeft, FileIcon, LockIcon, PlayIcon, SidebarIcon } from '../../components/Icons'
+import { ChevronLeft, FileIcon, LockIcon, SidebarIcon } from '../../components/Icons'
 import Markdown from '../../components/Markdown'
 import { Pill, ProgressBar } from '../../components/ui'
-import { fileInfo, getLearnCourse } from '../../data/mock'
-import { lockedSections, sectionLabel, sectionStatus } from './progress'
-import { duration, grade, mmss } from './quiz'
-import QuizAttempt from './QuizAttempt'
-import QuizResult from './QuizResult'
+import { useLesson, useReportProgress } from './learnApi'
+import { useMyCourse } from './myCoursesApi'
+import { sectionLabel } from './progress'
 import './learner.css'
 
 const TYPE = { video: 'VIDEO', pdf: 'TÀI LIỆU PDF', page: 'BÀI ĐỌC', quiz: 'BÀI KIỂM TRA' }
-const RULE = {
-    video: 'Tự động hoàn thành khi bạn xem hết video.',
-    pdf: 'Tự động hoàn thành khi bạn mở tài liệu.',
-    page: 'Tự động hoàn thành khi bạn đọc tới cuối bài.',
+const KIND = { video: 'Video', pdf: 'Tài liệu PDF', page: 'Bài đọc', quiz: 'Bài kiểm tra' }
+// Quy tắc "percent" (backend/app/learning.py): đạt đủ bao nhiêu % thì hoàn thành
+const PERCENT_RULE = { video: 'xem được', pdf: 'đọc tới', page: 'đọc được' }
+
+const fmtPct = (n) => `${Math.round(n * 100) / 100}%`
+const fmtSize = (bytes) => {
+    if (bytes == null) return ''
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+    return `${(bytes / 1024 / 1024).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} MB`
 }
 
-function itemMeta(x) {
-    if (x.t === 'video') return `Video · ${x.minutes} phút`
-    if (x.t === 'pdf') return `PDF · ${x.pages} trang`
-    if (x.t === 'page') return `Bài đọc · ${x.minutes} phút`
-    const { minutes, attempts, is_graded: graded } = x.quiz
-    return `${graded ? 'Tính điểm' : 'Luyện tập'} · ${minutes} phút · ${attempts === 0 ? 'không giới hạn lượt' : `${attempts} lượt`}`
+const itemMeta = (x) => `${KIND[x.lesson_type]}${x.estimated_minutes ? ` · ${x.estimated_minutes} phút` : ''}`
+
+/** Hướng dẫn hoàn thành, theo quy tắc backend trả về (lesson.completion). */
+function ruleText({ lesson_type: type, completion, quiz }) {
+    if (completion.code === 'open') return 'Bài học được tính hoàn thành ngay khi bạn mở.'
+    if (completion.code === 'percent') return `Tự động hoàn thành khi bạn ${PERCENT_RULE[type]} ${fmtPct(completion.percent)} nội dung.`
+    return quiz ? `Tự động hoàn thành khi bạn đạt từ ${fmtPct(quiz.pass_score_percent)} điểm trở lên.` : 'Tự động hoàn thành khi bạn làm đạt bài kiểm tra.'
 }
 
 /** Một dòng chữ: quá dài thì cắt "…"; khi hover nút cha (.next-topic) thì chạy chữ để đọc hết. */
@@ -46,100 +51,63 @@ function Marquee({ text }) {
     )
 }
 
-/** Bao bọc: đọc ?topic=N, giữ trạng thái hoàn thành của cả khóa trong phiên. */
+function Shell({ courseId, children }) {
+    return (
+        <div className="page">
+            <LearnerHeader />
+            <main className="container container--1200" style={{ paddingTop: 28 }}>
+                <Link to={`/courses/${courseId}`} className="back-link"><ChevronLeft />Về khóa học</Link>
+                {children}
+            </main>
+        </div>
+    )
+}
+
+/** Bao bọc: tải danh sách chủ đề → bài (GET /me/courses/:id), đọc ?topic=N. */
 export default function Learn() {
     const { courseId } = useParams()
     const [params] = useSearchParams()
-    // TODO: lấy theo :courseId khi có API; hiện luôn là khóa ATLD-01 của học viên mẫu
-    const [course, setCourse] = useState(() => getLearnCourse())
-    const locked = lockedSections(course)
-    const fallback = Math.max(0, course.sections.findIndex((s, i) => !locked[i] && sectionStatus(s) !== 'done'))
+    const { data: course, error, isPending } = useMyCourse(courseId)
+
+    if (isPending) return <div className="page"><LearnerHeader /><div className="center-state">Đang tải…</div></div>
+    if (error) {
+        const notFound = error.response?.status === 404 || error.response?.status === 422
+        return (
+            <Shell courseId={courseId}>
+                <div role="alert" className="status-msg status-msg--error">
+                    {notFound ? 'Không tìm thấy khóa học hoặc bạn không được ghi danh vào khóa này.' : errorMessage(error, 'Không tải được khóa học.')}
+                </div>
+            </Shell>
+        )
+    }
+
+    const { sections } = course
+    if (!sections.length) return <Shell courseId={courseId}><p className="empty-note">Khóa học chưa có nội dung. Vui lòng quay lại sau.</p></Shell>
+
+    const fallback = Math.max(0, sections.findIndex((s) => !s.locked && s.status !== 'completed'))
     const asked = Number(params.get('topic')) - 1
-    const si = asked >= 0 && asked < course.sections.length ? asked : fallback
-
-    const markDone = useCallback((sIdx, iIdx) => setCourse((c) => {
-        if (c.sections[sIdx].items[iIdx].done) return c
-        const next = structuredClone(c)
-        next.sections[sIdx].items[iIdx].done = true
-        return next
-    }), [])
-
-    return <TopicView key={si} course={course} si={si} locked={locked[si]} courseId={courseId} markDone={markDone} />
+    const si = asked >= 0 && asked < sections.length ? asked : fallback
+    return <TopicView key={si} course={course} si={si} courseId={courseId} />
 }
 
-function TopicView({ course, si, locked, courseId, markDone }) {
+function TopicView({ course, si, courseId }) {
     const section = course.sections[si]
-    const items = section.items
+    const { lessons, locked } = section
     const nextIdx = si + 1 < course.sections.length ? si + 1 : -1
 
-    const [cur, setCur] = useState(() => Math.max(0, items.findIndex((x) => !x.done)))
+    const [cur, setCur] = useState(() => Math.max(0, lessons.findIndex((x) => x.status !== 'completed')))
     const [side, setSide] = useState(true)
-    const [mode, setMode] = useState('intro') // intro | attempt | result
-    const [focus, setFocus] = useState(false)
-    const [answers, setAnswers] = useState({})
-    const [left, setLeft] = useState(0)
-    const leftRef = useRef(0) // nguồn thật của đồng hồ; state chỉ để hiển thị
-    const [tries, setTries] = useState([])
-
-    const a = items[cur]
-    const quiz = a.quiz
-    const nDone = items.filter((x) => x.done).length
-    const allDone = sectionStatus(section) === 'done'
-    const triesLeft = !quiz ? 0 : quiz.attempts === 0 ? Infinity : quiz.attempts - tries.length
-    const last = tries[tries.length - 1]
+    // Danh sách bài lấy lại sau mỗi lần hoàn thành bài → giữ chỉ số trong phạm vi nếu số bài thay đổi
+    const idx = Math.min(cur, lessons.length - 1)
+    const item = lessons[idx]
+    const nDone = section.completed_lessons
+    const allDone = section.status === 'completed'
 
     const go = (i) => {
-        if (i < 0 || i >= items.length || i === cur) return
-        if (a.t === 'video') markDone(si, cur) // bản giao diện: coi như đã xem hết khi chuyển bài
-        if (items[i].t === 'pdf') markDone(si, i)
+        if (i < 0 || i >= lessons.length || i === idx) return
         setCur(i)
-        setMode('intro')
-        setTries([])
         window.scrollTo?.(0, 0)
     }
-
-    const finish = useCallback((timeout) => {
-        const g = grade(quiz.questions, answers)
-        const ok = g.pct >= quiz.pass
-        setTries((t) => [...t, { ...g, ok, used: quiz.minutes * 60 - Math.max(0, leftRef.current), timeout, ans: { ...answers } }])
-        if (ok) markDone(si, cur)
-        setMode('result')
-        setFocus(true)
-    }, [answers, cur, markDone, quiz, si])
-
-    // Đồng hồ chạy suốt lượt làm, kể cả khi "Tạm thoát"; hết giờ → tự nộp
-    const finishRef = useRef(finish)
-    useEffect(() => { finishRef.current = finish })
-    useEffect(() => {
-        if (mode !== 'attempt') return
-        const id = setInterval(() => {
-            leftRef.current -= 1
-            if (leftRef.current <= 0) finishRef.current(true)
-            else setLeft(leftRef.current)
-        }, 1000)
-        return () => clearInterval(id)
-    }, [mode])
-
-    const startQuiz = () => {
-        setAnswers({})
-        leftRef.current = quiz.minutes * 60
-        setLeft(quiz.minutes * 60)
-        setMode('attempt')
-        setFocus(true)
-    }
-
-    if (quiz && focus && mode === 'attempt') {
-        return <QuizAttempt title={a.name} questions={quiz.questions} answers={answers} setAnswers={setAnswers} left={left}
-            onExit={() => setFocus(false)} onSubmit={finish} />
-    }
-    if (quiz && focus && mode === 'result' && last) {
-        return <QuizResult title={a.name} questions={quiz.questions} attempt={last} attemptNo={tries.length}
-            allowed={quiz.attempts} pass={quiz.pass} triesLeft={triesLeft} reviewPolicy={quiz.review_policy}
-            onRetry={startQuiz}
-            onNext={() => { setFocus(false); setMode('intro'); if (cur + 1 < items.length) go(cur + 1) }}
-            onExit={() => { setFocus(false); setMode('intro') }} />
-    }
-
     const topicUrl = (i) => `/courses/${courseId}/learn?topic=${i + 1}`
 
     return (
@@ -161,27 +129,30 @@ function TopicView({ course, si, locked, courseId, markDone }) {
                                 <span className="small muted">{course.title}</span>
                             </div>
                             <div className="stack">
-                                <ProgressBar value={(nDone / items.length) * 100} done={allDone} size="sm" label="Tiến độ chủ đề" />
-                                <span className="small text-2">{nDone}/{items.length} bài học đã hoàn thành</span>
+                                <ProgressBar value={(nDone / lessons.length) * 100} done={allDone} size="sm" label="Tiến độ chủ đề" />
+                                <span className="small text-2">{nDone}/{lessons.length} bài học đã hoàn thành</span>
                             </div>
                         </div>
                         <nav aria-label="Bài học trong chủ đề" className="learn-side__nav">
-                            {!locked && items.map((x, i) => (
-                                <button key={x.name} type="button" className="lesson-item" aria-current={i === cur ? 'page' : undefined} onClick={() => go(i)}>
-                                    <span className={`lesson-dot${x.done ? ' lesson-dot--done' : ''}`}>{x.done ? '✓' : i + 1}</span>
-                                    <span className="stack" style={{ gap: 2 }}>
-                                        <span style={{ fontSize: 14, fontWeight: 600 }}>{x.name}</span>
-                                        <span style={{ fontSize: 12 }} className="muted">{itemMeta(x)}</span>
-                                    </span>
-                                </button>
-                            ))}
+                            {!locked && lessons.map((x, i) => {
+                                const done = x.status === 'completed'
+                                return (
+                                    <button key={x.id} type="button" className="lesson-item" aria-current={i === idx ? 'page' : undefined} onClick={() => go(i)}>
+                                        <span className={`lesson-dot${done ? ' lesson-dot--done' : ''}`}>{done ? '✓' : i + 1}</span>
+                                        <span className="stack" style={{ gap: 2 }}>
+                                            <span style={{ fontSize: 14, fontWeight: 600 }}>{x.title}</span>
+                                            <span style={{ fontSize: 12 }} className="muted">{itemMeta(x)}</span>
+                                        </span>
+                                    </button>
+                                )
+                            })}
                         </nav>
                         <div className="learn-side__foot">
                             {nextIdx < 0 ? (
                                 <Link to={`/courses/${courseId}`} className="next-topic">
                                     <span className="next-topic__text"><small>Chủ đề cuối</small><Marquee text="Về trang khóa học" /></span><span aria-hidden="true" className="next-topic__arrow">›</span>
                                 </Link>
-                            ) : allDone || !course.is_sequential ? (
+                            ) : !course.sections[nextIdx].locked ? (
                                 <Link to={topicUrl(nextIdx)} className="next-topic">
                                     <span className="next-topic__text"><small>Chủ đề tiếp theo</small><Marquee text={`${sectionLabel(nextIdx)}: ${course.sections[nextIdx].title}`} /></span>
                                     <span aria-hidden="true" className="next-topic__arrow">›</span>
@@ -201,7 +172,7 @@ function TopicView({ course, si, locked, courseId, markDone }) {
                         <button type="button" className="side-toggle" onClick={() => setSide(true)} aria-expanded="false" aria-label="Hiện thanh bên" title="Hiện thanh bên">
                             <SidebarIcon />
                         </button>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>{nDone}/{items.length}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>{nDone}/{lessons.length}</span>
                     </aside>
                 )}
 
@@ -217,28 +188,11 @@ function TopicView({ course, si, locked, courseId, markDone }) {
                         </div>
                     ) : (
                         <>
-                            <div className="stack">
-                                <span className="small muted">{sectionLabel(si)} · {section.title} · Bài {cur + 1}/{items.length}</span>
-                                <div className="row">
-                                    <span className="type-label">{TYPE[a.t]}</span>
-                                    <Pill tone={a.done ? 'success' : 'gray'} tag>{a.done ? '✓ Đã hoàn thành' : 'Chưa hoàn thành'}</Pill>
-                                </div>
-                                <h1 style={{ fontSize: 26, fontWeight: 700 }}>{a.name}</h1>
-                                <span className="small text-2">{quiz ? `Tự động hoàn thành khi bạn đạt từ ${quiz.pass}% điểm trở lên.` : RULE[a.t]}</span>
-                            </div>
-
-                            {a.t === 'video' && <VideoLesson item={a} />}
-                            {a.t === 'pdf' && <PdfLesson item={a} />}
-                            {a.t === 'page' && <PageLesson key={a.name} item={a} onEnd={() => markDone(si, cur)} />}
-                            {quiz && (
-                                <QuizIntro quiz={quiz} mode={mode} left={left} tries={tries} triesLeft={triesLeft}
-                                    onStart={startQuiz} onResume={() => setFocus(true)} />
-                            )}
-                            {!quiz && <Attachments ids={a.files} />}
-
+                            <LessonPane key={item.id} courseId={courseId} item={item}
+                                crumb={`${sectionLabel(si)} · ${section.title} · Bài ${idx + 1}/${lessons.length}`} />
                             <div className="lesson-nav">
-                                <button type="button" className="btn" disabled={cur === 0} onClick={() => go(cur - 1)}>‹ Bài trước</button>
-                                <button type="button" className="btn" disabled={cur === items.length - 1} onClick={() => go(cur + 1)}>Bài tiếp theo ›</button>
+                                <button type="button" className="btn" disabled={idx === 0} onClick={() => go(idx - 1)}>‹ Bài trước</button>
+                                <button type="button" className="btn" disabled={idx === lessons.length - 1} onClick={() => go(idx + 1)}>Bài tiếp theo ›</button>
                             </div>
                         </>
                     )}
@@ -248,65 +202,150 @@ function TopicView({ course, si, locked, courseId, markDone }) {
     )
 }
 
-function VideoLesson({ item }) {
-    const total = item.minutes * 60
-    const pos = item.position ?? 0 // lesson_progress.last_position_seconds
+/** Một bài: tải nội dung, báo backend "đã mở bài" một lần, rồi hiện theo loại bài. */
+function LessonPane({ courseId, item, crumb }) {
+    const { data: lesson, error, isPending } = useLesson(courseId, item.id)
+    const report = useReportProgress(courseId)
+    const save = (body) => report(item.id, body)
+
+    const loaded = lesson != null
+    const opened = useRef(false)
+    useEffect(() => {
+        if (!loaded || opened.current) return
+        opened.current = true
+        report(item.id)
+    }, [loaded, item.id, report])
+
+    const done = (lesson?.progress.status ?? item.status) === 'completed'
+    const header = (
+        <div className="stack">
+            <span className="small muted">{crumb}</span>
+            <div className="row">
+                <span className="type-label">{TYPE[item.lesson_type]}</span>
+                <Pill tone={done ? 'success' : 'gray'} tag>{done ? '✓ Đã hoàn thành' : 'Chưa hoàn thành'}</Pill>
+            </div>
+            <h1 style={{ fontSize: 26, fontWeight: 700 }}>{item.title}</h1>
+            {lesson && <span className="small text-2">{ruleText(lesson)}</span>}
+        </div>
+    )
+
+    if (isPending) return <>{header}<div className="center-state">Đang tải bài học…</div></>
+    if (error) {
+        return (
+            <>
+                {header}
+                <div role="alert" className="status-msg status-msg--error">{errorMessage(error, 'Không tải được bài học.')}</div>
+            </>
+        )
+    }
+
+    return (
+        <>
+            {header}
+            {lesson.lesson_type === 'video' && <VideoLesson lesson={lesson} onSave={save} />}
+            {lesson.lesson_type === 'pdf' && <PdfLesson lesson={lesson} />}
+            {lesson.lesson_type === 'page' && <PageLesson lesson={lesson} onSave={save} />}
+            {lesson.lesson_type === 'quiz' && <QuizInfo quiz={lesson.quiz} />}
+            {lesson.lesson_type !== 'quiz' && <Attachments files={lesson.files} />}
+        </>
+    )
+}
+
+/** Video: xem tiếp từ vị trí đã lưu; dừng/chuyển bài thì lưu vị trí (last_position_seconds). */
+function VideoLesson({ lesson, onSave }) {
+    const { media, progress } = lesson
+    const ref = useRef(null)
+    const onSaveRef = useRef(onSave)
+    useEffect(() => { onSaveRef.current = onSave })
+    // Vị trí bắt đầu chốt lúc mở bài; xem gần hết rồi thì xem lại từ đầu
+    const [start] = useState(() => {
+        const pos = progress.last_position_seconds ?? 0
+        return media?.duration_seconds && pos >= media.duration_seconds - 5 ? 0 : pos
+    })
+    const playing = useRef(false)
+    const position = (v) => ({ position_seconds: Math.floor(v.currentTime) })
+
+    useEffect(() => {
+        const v = ref.current
+        return () => { if (v && playing.current) onSaveRef.current(position(v)) } // chuyển bài khi đang phát
+    }, [])
+
     return (
         <div className="stack" style={{ gap: 16 }}>
-            <div className="video-box">
-                <span style={{ position: 'absolute', top: 14, left: 16, fontSize: 13, color: '#ADB5BD' }}>[VIDEO BÀI GIẢNG]</span>
-                <button type="button" className="video-box__play" aria-label={pos ? `Xem tiếp từ ${mmss(pos)}` : 'Phát video'}><PlayIcon size={28} /></button>
-                <div className="video-box__bar" aria-hidden="true">
-                    <span>{mmss(pos)}</span>
-                    <div style={{ flex: 1, height: 4, borderRadius: 2, background: '#495057' }}>
-                        <div style={{ width: `${(pos / total) * 100}%`, height: 4, borderRadius: 2, background: '#fff' }} />
-                    </div>
-                    <span>{mmss(total)}</span>
-                </div>
-            </div>
-            {item.description && <p className="prose">{item.description}</p>}
+            {media?.url ? (
+                <video ref={ref} className="video-player" src={media.url} controls preload="metadata"
+                    onLoadedMetadata={(e) => { if (start) e.currentTarget.currentTime = start }}
+                    onPlay={() => { playing.current = true }}
+                    onPause={(e) => { playing.current = false; onSave(position(e.currentTarget)) }} />
+            ) : (
+                <div className="video-box"><span style={{ fontSize: 14, color: '#ADB5BD' }}>Video chưa được tải lên.</span></div>
+            )}
+            {lesson.description && <p className="prose">{lesson.description}</p>}
         </div>
     )
 }
 
 /** Nhúng trình xem PDF có sẵn của trình duyệt; trình duyệt không hỗ trợ (đa số di động) thì hiện nút mở/tải. */
-function PdfLesson({ item }) {
-    const file = `${item.name}.pdf`
+function PdfLesson({ lesson }) {
+    const { media } = lesson
+    const url = media?.url
+    const file = media?.filename ?? `${lesson.title}.pdf`
     return (
         <div className="stack" style={{ gap: 12 }}>
             <div className="pdf-viewer">
                 <div className="pdf-viewer__bar">
-                    <span className="row" style={{ gap: 8, minWidth: 0 }}><FileIcon />{file}<span className="small muted" style={{ fontWeight: 400 }}>· {item.pages} trang</span></span>
-                    {item.url && (
+                    <span className="row" style={{ gap: 8, minWidth: 0 }}>
+                        <FileIcon />{file}
+                        {media?.page_count && <span className="small muted" style={{ fontWeight: 400 }}>· {media.page_count} trang</span>}
+                    </span>
+                    {url && (
                         <span className="row" style={{ gap: 8 }}>
-                            <a href={item.url} target="_blank" rel="noreferrer" className="btn btn--sm">Mở tab mới</a>
-                            <a href={item.url} download={file} className="btn btn--sm" style={{ color: 'var(--primary)' }}>Tải về</a>
+                            <a href={url} target="_blank" rel="noreferrer" className="btn btn--sm">Mở tab mới</a>
+                            <a href={url} download={file} className="btn btn--sm" style={{ color: 'var(--primary)' }}>Tải về</a>
                         </span>
                     )}
                 </div>
-                {item.url ? (
-                    <object data={`${item.url}#view=FitH`} type="application/pdf" className="pdf-viewer__frame" aria-label={`Tài liệu ${item.name}`}>
+                {url ? (
+                    <object data={`${url}#view=FitH`} type="application/pdf" className="pdf-viewer__frame" aria-label={`Tài liệu ${lesson.title}`}>
                         <div className="pdf-viewer__fallback">
                             <span>Trình duyệt này không hiển thị được PDF trực tiếp.</span>
-                            <a href={item.url} target="_blank" rel="noreferrer" className="btn btn--primary">Mở tài liệu</a>
+                            <a href={url} target="_blank" rel="noreferrer" className="btn btn--primary">Mở tài liệu</a>
                         </div>
                     </object>
                 ) : (
                     <div className="pdf-viewer__fallback">Tài liệu chưa được tải lên.</div>
                 )}
             </div>
-            {item.description && <p className="prose">{item.description}</p>}
+            {lesson.description && <p className="prose">{lesson.description}</p>}
         </div>
     )
 }
 
-/** Bài đọc dài: thanh tiến độ đọc theo vị trí cuộn; đọc tới cuối thì đánh dấu hoàn thành. */
-function PageLesson({ item, onEnd }) {
+/** Bài đọc dài: thanh tiến độ đọc theo vị trí cuộn; đọc tới cuối hoặc rời bài thì lưu % đã đọc. */
+function PageLesson({ lesson, onSave }) {
     const ref = useRef(null)
     const endRef = useRef(null)
-    const [pct, setPct] = useState(0) // sẽ ghi vào lesson_progress.progress_percent khi có API
-    const onEndRef = useRef(onEnd)
-    useEffect(() => { onEndRef.current = onEnd })
+    const [pct, setPct] = useState(0)
+    const pctRef = useRef(0)
+    const onSaveRef = useRef(onSave)
+    useEffect(() => { onSaveRef.current = onSave })
+    // Bài đã hoàn thành (kể cả vừa hoàn thành nhờ lần báo mở bài) thì không cần gửi thêm số liệu đọc
+    const doneRef = useRef(false)
+    useEffect(() => { doneRef.current = lesson.progress.status === 'completed' })
+    const saved = useRef(Number(lesson.progress.progress_percent))
+    const flush = () => {
+        if (doneRef.current || pctRef.current <= saved.current) return
+        saved.current = pctRef.current
+        onSaveRef.current({ progress_percent: pctRef.current })
+    }
+    const flushRef = useRef(flush)
+    useEffect(() => { flushRef.current = flush })
+
+    const files = new Map(lesson.files.map((f) => [f.id, f.url]))
+    const resolveFile = (src) => {
+        const m = /^file:(\d+)$/.exec(src ?? '')
+        return m ? files.get(Number(m[1])) ?? '' : src
+    }
 
     useEffect(() => {
         const onScroll = () => {
@@ -314,7 +353,8 @@ function PageLesson({ item, onEnd }) {
             if (!el) return
             const r = el.getBoundingClientRect()
             const read = Math.min(Math.max(window.innerHeight - r.top, 0), r.height)
-            setPct((p) => Math.max(p, Math.round((read / Math.max(r.height, 1)) * 100)))
+            pctRef.current = Math.max(pctRef.current, Math.round((read / Math.max(r.height, 1)) * 100))
+            setPct(pctRef.current)
         }
         // Đo lần đầu sau khi trình duyệt vẽ xong (không setState đồng bộ trong effect)
         const raf = requestAnimationFrame(onScroll)
@@ -324,13 +364,18 @@ function PageLesson({ item, onEnd }) {
             cancelAnimationFrame(raf)
             window.removeEventListener('scroll', onScroll)
             window.removeEventListener('resize', onScroll)
+            flushRef.current() // rời bài giữa chừng → lưu phần đã đọc
         }
     }, [])
 
     useEffect(() => {
         const el = endRef.current
         if (!el || typeof IntersectionObserver === 'undefined') return
-        const io = new IntersectionObserver(([e]) => e.isIntersecting && onEndRef.current(), { threshold: 1 })
+        const io = new IntersectionObserver(([e]) => {
+            if (!e.isIntersecting) return
+            pctRef.current = 100
+            flushRef.current()
+        }, { threshold: 1 })
         io.observe(el)
         return () => io.disconnect()
     }, [])
@@ -340,26 +385,26 @@ function PageLesson({ item, onEnd }) {
             <div className="reading-bar" role="progressbar" aria-label="Tiến độ đọc" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
                 <div style={{ width: `${pct}%` }} />
             </div>
-            <article ref={ref} aria-label={`Nội dung ${item.name}`}>
-                <Markdown>{item.content}</Markdown>
+            <article ref={ref} aria-label={`Nội dung ${lesson.title}`}>
+                <Markdown resolveFile={resolveFile}>{lesson.content}</Markdown>
                 <div ref={endRef} className="reading-end small text-2">Hết bài đọc · đã đọc {pct}%</div>
             </article>
         </>
     )
 }
 
-function Attachments({ ids }) {
-    const files = (ids ?? []).map((id) => ({ id, ...fileInfo(id) })).filter((f) => f.name)
-    if (!files.length) return null
+function Attachments({ files }) {
+    const list = files.filter((f) => f.purpose === 'attachment')
+    if (!list.length) return null
     return (
         <section aria-labelledby="att" className="attachments">
             <h2 id="att" style={{ fontSize: 15, fontWeight: 700 }}>Tài liệu đính kèm</h2>
             <ul>
-                {files.map((f) => (
+                {list.map((f) => (
                     <li key={f.id}>
                         <FileIcon />
-                        <a href={f.url} download={f.name}>{f.name}</a>
-                        <span className="small muted">{f.size}</span>
+                        {f.url ? <a href={f.url} download={f.filename ?? undefined}>{f.filename ?? 'Tệp đính kèm'}</a> : <span>{f.filename ?? 'Tệp đính kèm'}</span>}
+                        <span className="small muted">{fmtSize(f.size_bytes)}</span>
                     </li>
                 ))}
             </ul>
@@ -367,41 +412,26 @@ function Attachments({ ids }) {
     )
 }
 
-function QuizIntro({ quiz, mode, left, tries, triesLeft, onStart, onResume }) {
-    const { questions, minutes, pass, attempts } = quiz
+/** Thông tin bài kiểm tra. Làm bài (QuizAttempt/QuizResult) sẽ nối khi có API quiz. */
+function QuizInfo({ quiz }) {
+    if (!quiz) return <p className="empty-note">Bài kiểm tra chưa được thiết lập.</p>
+    const minutes = quiz.time_limit_seconds ? Math.round(quiz.time_limit_seconds / 60) : null
     return (
         <div className="quiz-intro">
             <div className="quiz-facts">
-                <div><span>Số câu hỏi</span><span>{questions.length} câu</span></div>
-                <div><span>Thời gian</span><span>{minutes} phút</span></div>
-                <div><span>Điểm đạt</span><span>{pass}%</span></div>
-                <div><span>Lượt làm</span><span>{attempts === 0 ? 'Không giới hạn' : `Còn ${Math.max(0, triesLeft)}/${attempts}`}</span></div>
+                <div><span>Số câu hỏi</span><span>{quiz.question_count} câu</span></div>
+                <div><span>Thời gian</span><span>{minutes ? `${minutes} phút` : 'Không giới hạn'}</span></div>
+                <div><span>Điểm đạt</span><span>{fmtPct(quiz.pass_score_percent)}</span></div>
+                <div><span>Lượt làm</span><span>{quiz.max_attempts ? `${quiz.max_attempts} lượt` : 'Không giới hạn'}</span></div>
             </div>
             <p className="text-2" style={{ fontSize: 15, lineHeight: 1.6 }}>
                 {quiz.is_graded ? 'Bài kiểm tra tính điểm, là điều kiện hoàn thành khóa học. ' : 'Quiz luyện tập, không tính vào kết quả khóa học. '}
                 Tất cả câu hỏi hiển thị trên một trang. Đồng hồ bắt đầu đếm khi bạn bấm bắt đầu và bài tự nộp khi hết giờ.
             </p>
             <div className="row" style={{ gap: 12 }}>
-                {mode === 'attempt' && <button type="button" className="btn btn--primary btn--lg" onClick={onResume}>Tiếp tục làm bài · còn {mmss(left)}</button>}
-                {mode !== 'attempt' && triesLeft > 0 && (
-                    <button type="button" className="btn btn--primary btn--lg" onClick={onStart}>{tries.length ? 'Làm lại bài kiểm tra' : 'Bắt đầu làm bài'}</button>
-                )}
-                {mode !== 'attempt' && triesLeft <= 0 && <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger-dark)' }}>Bạn đã dùng hết số lượt làm bài.</span>}
+                <button type="button" className="btn btn--primary btn--lg" disabled>Bắt đầu làm bài</button>
+                <span className="small text-2">Chức năng làm bài kiểm tra đang được phát triển.</span>
             </div>
-            {tries.length > 0 && (
-                <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>Các lần làm trước</span>
-                    {tries.map((t, i) => (
-                        <div key={i} className="try-row">
-                            <span>Lần {i + 1} · {duration(t.used)}</span>
-                            <span className="row" style={{ gap: 12 }}>
-                                <span style={{ fontWeight: 700 }}>{t.pct}%</span>
-                                <Pill tone={t.ok ? 'success' : 'red'} tag>{t.ok ? 'Đạt' : 'Chưa đạt'}</Pill>
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     )
 }

@@ -180,3 +180,96 @@ class MyCourseDetailOut(MyCourseOut):
     # Điểm đạt của bài kiểm tra tính điểm cuối cùng trong khóa; None = khóa không có bài tính điểm
     final_pass_percent: float | None
     sections: list[MySectionOut]
+
+
+# --------------------------------------------------------------------------- #
+# Giao diện học (học viên)
+# --------------------------------------------------------------------------- #
+# Mã quy tắc hoàn thành (app/learning.py): open = mở bài là xong, percent = đạt đủ % (completion_percent),
+# quiz_pass = làm đạt bài kiểm tra
+CompletionRuleCode = Literal["open", "percent", "quiz_pass"]
+
+
+class LessonFileOut(BaseModel):
+    id: int  # storage_objects.id — bài đọc tham chiếu ảnh bằng ![…](file:<id>)
+    filename: str | None
+    content_type: str
+    size_bytes: int | None
+    purpose: Literal["attachment", "inline"]
+    url: str | None  # None = file chưa sẵn sàng
+
+
+class LessonMediaOut(BaseModel):
+    filename: str | None
+    content_type: str
+    size_bytes: int | None
+    duration_seconds: int | None
+    page_count: int | None
+    url: str | None
+
+
+class LessonQuizInfoOut(BaseModel):
+    is_graded: bool
+    pass_score_percent: float
+    time_limit_seconds: int | None  # None = không giới hạn
+    max_attempts: int | None  # None = không giới hạn
+    question_count: int
+    review_policy: str
+    opens_at: datetime | None
+    closes_at: datetime | None
+
+
+class LessonProgressOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: LessonProgressStatus
+    progress_percent: float
+    last_position_seconds: int | None
+    last_page: int | None
+    time_spent_seconds: int
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class CompletionRuleOut(BaseModel):
+    code: CompletionRuleCode
+    percent: float | None = None  # chỉ có với code = percent
+
+
+class MyLessonDetailOut(BaseModel):
+    id: int
+    course_id: int
+    section_id: int
+    title: str
+    description: str | None
+    lesson_type: str
+    estimated_minutes: int | None
+    content: str | None  # bài đọc: Markdown
+    media: LessonMediaOut | None  # video / pdf
+    files: list[LessonFileOut]
+    quiz: LessonQuizInfoOut | None
+    completion: CompletionRuleOut
+    progress: LessonProgressOut
+
+
+class LessonProgressIn(BaseModel):
+    """Số liệu học; bỏ trống trường nào = không có thông tin mới. Body rỗng = chỉ báo đã mở bài."""
+
+    progress_percent: float | None = Field(default=None, ge=0, le=100)
+    position_seconds: int | None = Field(default=None, ge=0, description="Video: vị trí đang xem")
+    page: int | None = Field(default=None, ge=1, description="PDF: trang đang đọc")
+    time_spent_seconds: int = Field(default=0, ge=0, le=86400, description="Thời gian học thêm từ lần gửi trước")
+
+
+class CourseProgressOut(BaseModel):
+    total_lessons: int
+    completed_lessons: int
+    progress_percent: float
+    enrollment_status: MyCourseStatus
+    completed_at: datetime | None
+
+
+class LessonProgressResultOut(BaseModel):
+    lesson_id: int
+    progress: LessonProgressOut
+    course: CourseProgressOut

@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     # TTL (giây) cho key state trong Redis
     state_ttl_seconds: int = 7 * 24 * 3600
+    # Gốc URL công khai của object storage (vd MinIO bucket public / CDN): <gốc>/<bucket>/<object_key>.
+    # Bỏ trống → API trả url = null (giao diện báo "chưa tải lên"). Sau thay bằng presigned URL.
+    media_base_url: str | None = None
     # rate_limit_per_minute: int = 10
     # monthly_budget_usd: float = 10.0
 
