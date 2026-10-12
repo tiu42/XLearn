@@ -89,3 +89,31 @@ export function SelectFilter({ id, label, value, onChange, options, className = 
         </>
     )
 }
+
+/** Dãy số trang: luôn có trang đầu, trang cuối và ±1 quanh trang hiện tại; chỗ bị lược bỏ hiện "…". */
+function pageItems(page, pages) {
+    const keep = new Set([1, pages, page - 1, page, page + 1].filter((p) => p >= 1 && p <= pages))
+    const out = []
+    let prev = 0
+    for (const p of [...keep].sort((a, b) => a - b)) {
+        if (p - prev === 2) out.push(prev + 1)  // chỉ thiếu đúng 1 trang thì hiện luôn số trang đó
+        else if (p - prev > 2) out.push(`gap-${p}`)
+        out.push(p)
+        prev = p
+    }
+    return out
+}
+
+export function Pagination({ page, pages, onChange, label = 'Phân trang' }) {
+    if (pages <= 1) return null
+    return (
+        <nav aria-label={label} className="pager">
+            <button type="button" className="btn btn--sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>‹ Trước</button>
+            {pageItems(page, pages).map((p) => (typeof p === 'number'
+                ? <button key={p} type="button" className="btn btn--sm btn--square" aria-current={p === page ? 'page' : undefined}
+                    aria-label={`Trang ${p}`} onClick={() => onChange(p)}>{p}</button>
+                : <span key={p} className="pager__gap" aria-hidden="true">…</span>))}
+            <button type="button" className="btn btn--sm" disabled={page >= pages} onClick={() => onChange(page + 1)}>Sau ›</button>
+        </nav>
+    )
+}

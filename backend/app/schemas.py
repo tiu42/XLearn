@@ -116,3 +116,36 @@ class ResetPasswordRequest(BaseModel):
 class UserListOut(BaseModel):
     items: list[UserOut]
     total: int
+
+
+# --------------------------------------------------------------------------- #
+# Khóa học của tôi (học viên)
+# --------------------------------------------------------------------------- #
+MyCourseStatus = Literal["active", "completed"]
+MyCourseSort = Literal["title", "recent", "due"]
+
+
+class MyCourseOut(BaseModel):
+    id: int  # courses.id
+    code: str
+    title: str
+    short_description: str | None
+    department: DepartmentOut | None
+    is_mandatory: bool
+    thumbnail_url: str | None
+    course_status: str
+    enrollment_status: MyCourseStatus
+    enrolled_at: datetime
+    due_at: datetime | None
+    completed_at: datetime | None
+    total_lessons: int
+    completed_lessons: int
+    progress_percent: float
+    last_activity_at: datetime | None
+
+
+class MyCourseListOut(BaseModel):
+    items: list[MyCourseOut]
+    total: int
+    # Phòng ban của mọi khóa đang ghi danh (không phụ thuộc bộ lọc) → dựng ô lọc phòng ban
+    departments: list[DepartmentOut]

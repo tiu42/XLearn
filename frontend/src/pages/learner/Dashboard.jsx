@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { errorMessage } from '../../api'
 import { CalendarIcon, QuizIcon } from '../../components/Icons'
 import { CoursePattern, SearchInput, SelectFilter } from '../../components/ui'
-import { courseCategory, getMyCourses, getTimeline } from '../../data/mock'
+import { getTimeline } from '../../data/mock'
+import { courseCategory, courseColors, useMyCourses } from './myCoursesApi'
 import './learner.css'
 
 export default function Dashboard() {
-    // Gần đây = lần cập nhật tiến độ mới nhất (v_enrollment_progress.last_activity_at)
-    const recent = useMemo(() => getMyCourses().sort((a, b) => b.last_access.localeCompare(a.last_access)).slice(0, 4), [])
+    // Gần đây = lần cập nhật tiến độ mới nhất; chưa học bài nào thì theo ngày ghi danh
+    const { data, error, isPending } = useMyCourses({ sort: 'recent', limit: 4 })
+    const recent = data?.items ?? []
     const timeline = useMemo(() => getTimeline(), [])
     const [range, setRange] = useState('30')
     const [sort, setSort] = useState('date')
@@ -28,10 +31,13 @@ export default function Dashboard() {
 
             <section aria-labelledby="recent" className="card card--pad">
                 <h2 id="recent" className="card__title">Khóa học truy cập gần đây</h2>
+                {isPending && <p className="muted">Đang tải…</p>}
+                {error && <div role="alert" className="status-msg status-msg--error">{errorMessage(error, 'Không tải được danh sách khóa học.')}</div>}
+                {data && recent.length === 0 && <p className="empty-note">Bạn chưa được ghi danh vào khóa học nào.</p>}
                 <div className="course-grid">
                     {recent.map((c) => (
                         <article key={c.id} className="course-card">
-                            <CoursePattern colors={c.colors} thumbnailUrl={c.thumbnail_url} />
+                            <CoursePattern colors={courseColors(c)} thumbnailUrl={c.thumbnail_url} />
                             <div className="course-card__body">
                                 <span className="course-card__cat">{courseCategory(c)}</span>
                                 <Link to={`/courses/${c.id}`} className="course-card__name">{c.title}</Link>

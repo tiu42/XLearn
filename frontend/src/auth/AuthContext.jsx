@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import api, { setSessionExpiredHandler, tokenStore } from '../api'
+import { queryClient } from '../queryClient'
 
 const AuthContext = createContext(null)
 
@@ -9,7 +10,10 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(() => !!tokenStore.get())
 
     useEffect(() => {
-        setSessionExpiredHandler(() => setUser(null))
+        setSessionExpiredHandler(() => {
+            queryClient.clear()
+            setUser(null)
+        })
         if (!tokenStore.get()) return
         api.get('/auth/me')
             .then(({ data }) => setUser(data))
@@ -21,6 +25,7 @@ export function AuthProvider({ children }) {
         const { data } = await api.post('/auth/login', { email, password })
         const { user: me, ...tokens } = data
         tokenStore.set(tokens, remember)
+        queryClient.clear()  // cache là dữ liệu riêng của từng user → không để lộ sang tài khoản khác
         setUser(me)
         return me
     }, [])
@@ -28,6 +33,7 @@ export function AuthProvider({ children }) {
     const logout = useCallback(async () => {
         const tokens = tokenStore.get()
         tokenStore.clear()
+        queryClient.clear()
         setUser(null)
         if (tokens?.refresh_token) {
             // Idempotent ở backend; lỗi mạng cũng không chặn việc đăng xuất phía client

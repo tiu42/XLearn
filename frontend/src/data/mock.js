@@ -1,5 +1,6 @@
 // Dữ liệu mẫu, khớp cấu trúc và nội dung với backend/db/02_seed.sql.
-// Backend hiện mới có /auth và /admin/users → các màn khóa học/học viên tạm dùng dữ liệu này.
+// Backend hiện có /auth, /admin/users và /me/courses (Khóa học của tôi, khối "gần đây" ở Dashboard);
+// các màn khóa học/học viên còn lại tạm dùng dữ liệu này.
 // Khi có API, thay từng hàm get* bằng lời gọi api.get(...) tương ứng.
 //
 // Quy ước để lớp API chuyển đổi giữa DB và giao diện:
@@ -89,18 +90,6 @@ const COURSES = [
 
 export const getTeacherCourses = () => clone(COURSES)
 export const getCourse = (id) => clone(COURSES.find((c) => c.id === Number(id)) ?? COURSES[0])
-
-/* --------------------------------------------------------------------------
- * Khóa học của học viên đang đăng nhập (enrollments + v_enrollment_progress)
- * ------------------------------------------------------------------------ */
-const MY_COURSES = [
-    { id: 1, title: 'An toàn lao động tại khu vực sản xuất', department: 'HSE', is_mandatory: true, progress: 45, enrollment_status: 'active', due: '2026-10-31', last_access: '2026-10-12T07:05', thumbnail_url: null, colors: ['#0F6CBF', '#2A82CF'] },
-    { id: 2, title: 'Bảo mật thông tin 2026', department: 'CNTT', is_mandatory: true, progress: 0, enrollment_status: 'active', due: '2026-10-18', last_access: '2026-10-02T02:00', thumbnail_url: null, colors: ['#5B3FD9', '#7259E0'] },
-    { id: 3, title: 'Quy trình 5S trong xưởng', department: 'VH', is_mandatory: false, progress: 33, enrollment_status: 'active', due: '2026-12-15', last_access: '2026-09-20T02:00', thumbnail_url: null, colors: ['#00798A', '#19909F'] },
-    { id: 6, title: 'Hội nhập nhân viên mới', department: 'NS', is_mandatory: true, progress: 100, enrollment_status: 'completed', due: '2026-03-31', last_access: '2026-03-12T03:00', thumbnail_url: null, colors: ['#3F6E2A', '#558541'] },
-]
-
-export const getMyCourses = () => clone(MY_COURSES)
 
 // Dòng thời gian: chỉ lấy từ DB có sẵn — giờ đóng quiz (quizzes.closes_at) và hạn khóa (enrollments.due_at)
 export const getTimeline = () => [
