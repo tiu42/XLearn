@@ -20,6 +20,8 @@ from .routers import (
     quiz,
     teach_content,
     teach_courses,
+    teach_learners,
+    teach_students,
     teach_uploads,
     timeline,
 )
@@ -62,6 +64,8 @@ app.include_router(departments.router)
 app.include_router(teach_courses.router)
 app.include_router(teach_content.router)
 app.include_router(teach_uploads.router)
+app.include_router(teach_learners.router)
+app.include_router(teach_students.router)
 
 
 @app.get("/health")

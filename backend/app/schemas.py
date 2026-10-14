@@ -618,6 +618,156 @@ class TeachContentOut(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Thông số khóa học & học viên (giảng viên)
+# --------------------------------------------------------------------------- #
+LearnerProgressStatus = Literal["not_started", "in_progress", "completed"]
+
+
+class LearnerUserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    full_name: str
+    employee_code: str | None
+    email: str
+    department: DepartmentOut | None
+    status: UserStatus
+
+
+class LearnerProgressOut(BaseModel):
+    """Tiến độ một ghi danh; chỉ đếm bài học viên nhìn thấy (đã publish, chưa xóa mềm)."""
+
+    enrollment_status: Literal["active", "completed"]
+    enrolled_at: datetime
+    due_at: datetime | None
+    completed_at: datetime | None
+    total_lessons: int
+    completed_lessons: int
+    progress_percent: float
+    progress_status: LearnerProgressStatus
+    last_activity_at: datetime | None
+    # Bài kiểm tra cuối khóa = bài tính điểm đứng sau cùng; None = khóa không có hoặc chưa làm
+    final_score_percent: float | None
+    final_passed: bool | None
+
+
+class CourseLearnerOut(LearnerProgressOut):
+    user: LearnerUserOut
+
+
+class CourseStatsLessonOut(BaseModel):
+    id: int
+    title: str
+    lesson_type: LessonType
+    section_title: str
+    completed_count: int  # số học viên (chưa bị xóa khỏi khóa) đã hoàn thành bài
+
+
+class CourseFinalQuizOut(BaseModel):
+    lesson_id: int
+    title: str
+    pass_score_percent: float
+
+
+class CourseStatsSummaryOut(BaseModel):
+    learner_count: int
+    completed_count: int
+    in_progress_count: int
+    not_started_count: int
+    avg_progress_percent: float
+    final_taken_count: int  # số học viên đã nộp bài kiểm tra cuối khóa
+    final_avg_score_percent: float | None
+
+
+class CourseStatsOut(BaseModel):
+    can_edit: bool  # thêm/xóa học viên, đổi hạn (trợ giảng: chỉ xem)
+    summary: CourseStatsSummaryOut
+    lessons: list[CourseStatsLessonOut]
+    final_quiz: CourseFinalQuizOut | None
+    learners: list[CourseLearnerOut]
+
+
+class LearnerCandidateListOut(BaseModel):
+    items: list[LearnerUserOut]
+    total: int  # tổng số phù hợp (items có thể bị cắt theo limit)
+
+
+class EnrollLearnersIn(BaseModel):
+    user_ids: list[int] = Field(min_length=1, max_length=500)
+    due_at: datetime | None = Field(default=None, description="Bỏ trống = hạn mặc định của khóa")
+
+
+class EnrollCoursesIn(BaseModel):
+    course_ids: list[int] = Field(min_length=1, max_length=100)
+    due_at: datetime | None = Field(default=None, description="Bỏ trống = hạn mặc định của từng khóa")
+
+
+class EnrollResultOut(BaseModel):
+    added: int  # ghi danh mới hoặc thêm lại sau khi bị xóa
+    skipped: int  # đã có trong khóa
+
+
+class LearnerUpdateIn(BaseModel):
+    due_at: datetime | None  # bắt buộc gửi; null = không có hạn
+
+
+class TeachStudentOut(LearnerUserOut):
+    # Chỉ tính các khóa user đang xem phụ trách (admin: mọi khóa)
+    course_count: int
+    completed_count: int
+    avg_progress_percent: float
+    last_activity_at: datetime | None
+
+
+class TeachStudentSummaryOut(BaseModel):
+    student_count: int
+    enrollment_count: int
+    completed_count: int
+    not_started_count: int  # có ghi danh nhưng chưa học bài nào
+
+
+class TeachStudentListOut(BaseModel):
+    items: list[TeachStudentOut]
+    total: int
+    summary: TeachStudentSummaryOut
+
+
+class StudentSectionOut(BaseModel):
+    id: int
+    title: str
+    total_lessons: int
+    completed_lessons: int
+
+
+class StudentQuizOut(BaseModel):
+    lesson_id: int
+    title: str
+    is_graded: bool
+    pass_score_percent: float
+    max_attempts: int | None
+    attempts_used: int
+    best_score_percent: float | None  # điểm cao nhất trong các lượt đã nộp
+    passed: bool
+    last_submitted_at: datetime | None
+
+
+class StudentCourseOut(LearnerProgressOut):
+    course_id: int
+    code: str
+    title: str
+    is_mandatory: bool
+    course_status: CourseStatus
+    can_edit: bool  # user đang xem được xóa học viên khỏi khóa / đổi hạn
+    sections: list[StudentSectionOut]
+    quizzes: list[StudentQuizOut]
+
+
+class TeachStudentDetailOut(LearnerUserOut):
+    last_login_at: datetime | None
+    courses: list[StudentCourseOut]
+
+
+# --------------------------------------------------------------------------- #
 # Dòng thời gian (học viên)
 # --------------------------------------------------------------------------- #
 class TimelineItemOut(BaseModel):
