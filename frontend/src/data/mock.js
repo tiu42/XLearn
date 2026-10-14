@@ -3,8 +3,9 @@
 // /me/courses/:id (Trang khóa học), /me/courses/:id/lessons/:lessonId (Giao diện học),
 // …/lessons/:lessonId/quiz (Làm bài kiểm tra), /me/timeline (Dòng thời gian ở Dashboard),
 // /teach/courses (danh sách + thêm/sửa/xóa khóa học của giảng viên, phần đầu trang quản lý khóa), /departments,
-// /teach/courses/:id/content + /uploads (chủ đề, bài học, upload file);
-// các màn còn lại (thông số & học viên, soạn câu hỏi quiz…) tạm dùng dữ liệu này.
+// /teach/courses/:id/content + /uploads (chủ đề, bài học, upload file),
+// /teach/courses/:id/stats + /learners (thông số khóa, thêm/xóa học viên), /teach/students (học viên);
+// màn còn lại (soạn câu hỏi quiz) tạm dùng dữ liệu này.
 // Khi có API, thay từng hàm get* bằng lời gọi api.get(...) tương ứng.
 //
 // Quy ước để lớp API chuyển đổi giữa DB và giao diện:
@@ -52,35 +53,6 @@ export const QUIZ_QUESTIONS = [
 ]
 
 /* --------------------------------------------------------------------------
- * Giảng viên: thông số khóa học
- * ------------------------------------------------------------------------ */
-const L = (id, name, code, dept, done, exam, enrolled = '01/10/2026') => ({ id, name, code, dept, done, exam, enrolled })
-
-export const getCourseStats = () => ({
-    items: [
-        { t: 'page', n: 'Giới thiệu khóa học' }, { t: 'video', n: 'Giới thiệu & quy định chung' }, { t: 'video', n: 'Nhận diện mối nguy' },
-        { t: 'pdf', n: 'Biển báo an toàn' }, { t: 'video', n: 'Sử dụng thiết bị bảo hộ cá nhân' }, { t: 'page', n: 'Bảng tra PPE theo khu vực' },
-        { t: 'quiz', n: 'Kiểm tra nhanh: Thiết bị bảo hộ' }, { t: 'video', n: 'An toàn khi vận hành máy' }, { t: 'page', n: 'Xử lý tình huống khẩn cấp' },
-        { t: 'video', n: 'Diễn tập sơ tán' }, { t: 'quiz', n: 'Bài kiểm tra cuối khóa' },
-    ],
-    people: [
-        L(1, 'Nguyễn Minh Anh', 'NV0412', 'Vận hành', 5, null), L(2, 'Lê Minh Cường', 'NV0233', 'Vận hành', 2, null),
-        L(3, 'Đỗ Thị Mai', 'NV0518', 'CNTT', 0, null, '05/10/2026'), L(4, 'Vũ Đức Tài', 'NV0377', 'Vận hành', 11, 83),
-        L(5, 'Ngô Thanh Tâm', 'NV0291', 'Kế hoạch', 8, null), L(6, 'Phạm Thu Dung', 'NV0624', 'Vận hành', 3, null),
-        L(7, 'Hoàng Lan Chi', 'NV0455', 'CNTT', 11, 100), L(8, 'Phan Thị Hằng', 'NV0188', 'HSE', 11, 100),
-        L(9, 'Hoàng Gia Giang', 'NV0702', 'Vận hành', 0, null, '08/10/2026'), L(10, 'Vũ Thanh Hoa', 'NV0349', 'Kế hoạch', 6, null),
-    ],
-    pool: [
-        { id: 21, name: 'Phạm Văn Đức', code: 'NV0815', dept: 'Vận hành' }, { id: 22, name: 'Lý Thu Trang', code: 'NV0820', dept: 'Vận hành' },
-        { id: 23, name: 'Cao Minh Khôi', code: 'NV0533', dept: 'CNTT' }, { id: 24, name: 'Mai Anh Thư', code: 'NV0144', dept: 'Nhân sự' },
-        { id: 25, name: 'Tạ Quang Vinh', code: 'NV0761', dept: 'Vận hành' }, { id: 26, name: 'Hồ Bảo Ngọc', code: 'NV0398', dept: 'Kế hoạch' },
-        { id: 27, name: 'Đinh Công Sơn', code: 'NV0207', dept: 'HSE' },
-    ],
-})
-
-export const DEPTS = DEPARTMENTS.map((d) => d.short)
-
-/* --------------------------------------------------------------------------
  * Giảng viên: soạn bài kiểm tra (c luôn là mảng)
  * ------------------------------------------------------------------------ */
 export const getQuizDraft = () => ({
@@ -93,52 +65,9 @@ export const getQuizDraft = () => ({
     })),
 })
 
-/* --------------------------------------------------------------------------
- * Giảng viên: học viên
- * ------------------------------------------------------------------------ */
-const S = (id, name, code, dept, courses, done, last) => ({ id, name, code, dept, courses, done, last })
-
-export const CATALOG = [
-    { id: 1, t: 'An toàn lao động tại khu vực sản xuất' }, { id: 2, t: 'Bảo mật thông tin 2026' },
-    { id: 3, t: 'Quy trình 5S trong xưởng' }, { id: 4, t: 'Sơ cấp cứu tại nơi làm việc' },
-]
-
-export const getStudents = () => [
-    S(1, 'Nguyễn Minh Anh', 'NV0412', 'Vận hành', [1, 2, 3], 0, 'Hôm nay, 14:05'),
-    S(2, 'Lê Minh Cường', 'NV0233', 'Vận hành', [1, 2, 3], 0, '05/10/2026'),
-    S(3, 'Đỗ Thị Mai', 'NV0518', 'CNTT', [1, 2], 0, 'Chưa truy cập'),
-    S(4, 'Vũ Đức Tài', 'NV0377', 'Vận hành', [1, 2, 4], 2, '09/10/2026'),
-    S(5, 'Ngô Thanh Tâm', 'NV0291', 'Kế hoạch', [1, 2], 0, 'Hôm qua'),
-    S(6, 'Phạm Thu Dung', 'NV0624', 'Vận hành', [1, 3], 0, '08/10/2026'),
-    S(7, 'Hoàng Lan Chi', 'NV0455', 'CNTT', [1, 2, 4], 3, '08/10/2026'),
-    S(8, 'Phan Thị Hằng', 'NV0188', 'HSE', [1, 4], 2, '06/10/2026'),
-    S(9, 'Hoàng Gia Giang', 'NV0702', 'Vận hành', [1], 0, '28/09/2026'),
-    S(10, 'Vũ Thanh Hoa', 'NV0349', 'Kế hoạch', [1, 2, 3], 0, 'Hôm nay, 09:20'),
-]
-
-export const getStudentDetail = () => ({
-    id: 1, name: 'Nguyễn Minh Anh', code: 'NV0412', dept: 'Vận hành', email: 'hv.minhanh@xlearn.dev', last: 'hôm nay, 14:05',
-    courses: [
-        {
-            id: 1, title: 'An toàn lao động tại khu vực sản xuất', kind: 'Bắt buộc', enrolled: '01/10/2026', due: '31/10/2026', dueSoon: true, done: 5, total: 11, exam: null,
-            topics: [['Giới thiệu khóa học', 1, 1], ['Quy định chung & nhận diện mối nguy', 3, 3], ['Thiết bị bảo hộ cá nhân', 1, 3], ['Vận hành máy & tình huống khẩn cấp', 0, 3], ['Đánh giá cuối khóa', 0, 1]],
-            tests: [{ name: 'Kiểm tra nhanh: Thiết bị bảo hộ', meta: 'Quiz luyện tập · lượt 1/2 · 11/10/2026', score: 56, pass: 80 }],
-        },
-        {
-            id: 2, title: 'Bảo mật thông tin 2026', kind: 'Bắt buộc', enrolled: '02/10/2026', due: '18/10/2026', dueSoon: true, done: 0, total: 5, exam: null,
-            topics: [['Nhận diện lừa đảo qua email', 0, 2], ['Mật khẩu & xác thực', 0, 2], ['Kiểm tra cuối', 0, 1]], tests: [],
-        },
-        {
-            id: 3, title: 'Quy trình 5S trong xưởng', kind: 'Tự chọn', enrolled: '15/09/2026', due: '15/12/2026', dueSoon: false, done: 2, total: 6, exam: null,
-            topics: [['Sàng lọc & sắp xếp', 2, 2], ['Sạch sẽ & săn sóc', 0, 2], ['Sẵn sàng & đánh giá', 0, 2]], tests: [],
-        },
-    ],
-})
-
 /* Tiện ích định dạng */
 export const fmtDate = (iso) => {
     if (!iso) return '—'
     const [y, m, d] = iso.slice(0, 10).split('-')
     return `${d}/${m}/${y}`
 }
-export const todayVN = () => new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
